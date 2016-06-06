@@ -1,3 +1,25 @@
+
+% Redistribution and use in source and binary forms, with or without
+% modification, are permitted provided that the following conditions are
+% met:
+%     * Redistributions of source code must retain the above copyright
+%       notice, this list of conditions and the following disclaimer.
+%     * Redistributions in binary form must reproduce the above copyright
+%       notice, this list of conditions and the following disclaimer in
+%       the documentation and/or other materials provided with the distribution
+%
+% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+% ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+% LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+% CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+% SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+% INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+% POSSIBILITY OF SUCH DAMAGE.
+
 function t_mc( )
     %
     cstate_ = containers.Map;
@@ -30,10 +52,10 @@ function t_mc( )
     set(gca,'ytick',[]);
     set(gca,'ztick',[]);
     set(gca,'Position',[0.06 0.15 0.7 0.7]);
-    
-    
-    
-    % read current state values    
+
+
+
+    % read current state values
     fig_names = {{'fig1.fig','fig1_mesh.fig'},...
         {'fig2.fig','fig2_mesh.fig'},...
         {'fig3.fig','fig3_mesh.fig'},...
@@ -46,7 +68,7 @@ function t_mc( )
         {'fig10.fig','fig10_mesh.fig'},...
         {'fig11.fig','fig11_mesh.fig'},...
         {'fig12.fig','fig12_mesh.fig'}};
-    
+
     vals = [0.0387,9.8588,9.9994608191478135,0.0097,9.99946,-1.8061,-1.7660,-0.6,1.10918,0.0708,-1.3064,0.0293];
     mc_lt   = [6,25, 25,30,60,22,24,22,60,30,105,105];
     for i = 1:12
@@ -91,7 +113,7 @@ function t_mc( )
         % the isovalue and MC case
         i0 = vals(i);
         mc = mc_lt(i);
-        
+
         % compute level set within unit cell
         levelset_ = 1;
         % generate isosurface
@@ -168,7 +190,7 @@ function [f1, f2, f3, f4, h1, h2, h3, h4] = setBilinearform(F,face)
             f1 = F(2); f2 = F(4); f3 = F(6); f4 = F(8);
             h1 = F(1); h2 = F(3); h3 = F(5); h4 = F(7);
     end % end switch
-    
+
 end % set bilinearform
 
 % Plot straight lines lying on the level set joining
@@ -308,7 +330,7 @@ function  [nrv,vt,nrc,cns,contours] = computeContorus(f,mc,isov)
     %  ii) compute closed polygons, we call these polygon contours
     % iii) compute the solution to the three quadratic equations
     %  iv) classify and triangulate contours
-    
+
     % cell topology
     % vertices accroding to the coordinate axes, x-axes fastes
     % v1 = 000, v2 = 001, v3 = 010, v4 = 011
@@ -318,11 +340,11 @@ function  [nrv,vt,nrc,cns,contours] = computeContorus(f,mc,isov)
     % e5 = (5,6), e6 = (6,8), e7 = (7,8), e8 = (5,7)
     % e9 = (1,5), e10 = (2,6), e11 = (4,8), e12 = (3,7)
     % faces:
-    % f1 = (1,2,3,4), f2 = (5,6,7,8), 
+    % f1 = (1,2,3,4), f2 = (5,6,7,8),
     % f3 = (1,2,5,6), f4 = (3,4,7,8),
     % f5 = (1,3,5,7), f6 = (2,4,6,8)
-    
-    % compute offsets along axis, 
+
+    % compute offsets along axis,
     % these are local coordinates used for interpolating vertices later on
     edges = [[1 2 -1  0  0]; ...
         [2 4  1 -1  0]; ...
@@ -336,7 +358,7 @@ function  [nrv,vt,nrc,cns,contours] = computeContorus(f,mc,isov)
         [2 6  1  0 -1]; ...
         [4 8  1  1 -1]; ...
         [3 7  0  1 -1]];
-    
+
     vt = zeros(12,4); % 4. coordinate means if vertex is set
     nrv = 0;
     for i = 1:12
@@ -409,7 +431,7 @@ function  [nrv,vt,nrc,cns,contours] = computeContorus(f,mc,isov)
             nrs = nrs + 1;
         end
     end
-    
+
     % compute closed contours
     contours = connect(nrv,vt,segments);
     % count nr. of countours and size
@@ -426,7 +448,7 @@ function  [nrv,vt,nrc,cns,contours] = computeContorus(f,mc,isov)
         if pos > 0
             nrc = nrc+1;
         end
-    end    
+    end
 end
 
 
@@ -509,10 +531,10 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
     nr = 0;
     ltc = 0;
     face = 0;
-    
+
     % handles to geometry
     t_handles = [];
-    
+
     % compute all 6 hyperbola intersections
     ui = zeros(3,2);
     vi = zeros(3,2);
@@ -557,11 +579,11 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
         end
         idx  = idx + 1;
     end
-    
+
     % check if there is a tunnel
     ict = ic(1) + ic(2) + ic(3);
-    
-    
+
+
     % triangulate tunnel
     if ict == 6
         % if there are three contours, one does not belong to the tunnel
@@ -576,10 +598,10 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                     umax = -2;
                     for i= 1:3
                         % collect min and max u
-                        if vt(contours(c,i),1) < umin 
+                        if vt(contours(c,i),1) < umin
                             umin = vt(contours(c,i),1);
                         end
-                        if vt(contours(c,i),1) > umax 
+                        if vt(contours(c,i),1) > umax
                             umax = vt(contours(c,i),1);
                         end
                     end
@@ -607,8 +629,8 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
         if abs(w - vi(3,2)) < 0.00005
             p3 = 2;
         end
-        
-        % connect alternating pi 
+
+        % connect alternating pi
         % get new v coordinate from face 4,5
         v = ui(3,p3);
         cvt(2,:) = [u,v,w];
@@ -628,7 +650,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
         p1 = mod(p1,2) + 1;
         u = ui(1,p1);
         cvt(6,:) = [u,v,w];
-        
+
         % fussion verties
         fvert = zeros(6,3);
         fvert(1,:) = (cvt(1,:) + cvt(2,:))/2;
@@ -637,20 +659,20 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
         fvert(4,:) = (cvt(3,:) + cvt(4,:))/2;
         fvert(5,:) = (cvt(5,:) + cvt(6,:))/2;
         fvert(6,:) = (cvt(5,:) + cvt(6,:))/2;
-        
+
         % generate triangle points
         tp = zeros(3,3);
         tp(1,:) = (cvt(1,:) + cvt(2,:))/2;
         tp(2,:) = (cvt(3,:) + cvt(4,:))/2;
         tp(3,:) = (cvt(5,:) + cvt(6,:))/2;
-        
+
 
         flag_special_case = false;
         if (cns(1) > 6 || cns(2) > 6 ||cns(3) > 6)
             flag_special_case = true;
             %disp('case with one contour');
         end
-        
+
         % collect vertex pairs
         cid = [c1,c2];
         for cq = 1:2
@@ -761,7 +783,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                     tri6(2,1) = 3; tri6(2,2) = 4; tri6(2,3) = 5;
                     tri6(3,1) = 5; tri6(3,2) = 6; tri6(3,3) = 1;
                     tri6(4,1) = 1; tri6(4,2) = 3; tri6(4,3) = 5;
-                    
+
                     vt6  = zeros(6,3);
                     vt6(1,:) = vt(contours(s,1),1:3);
                     vt6(2,:) = vt(contours(s,2),1:3);
@@ -774,7 +796,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                 end
             end
         else % there are some where a saddle point
-            % plot bary center    
+            % plot bary center
             ucoord = 0;
             vcoord = 0;
             wcoord = 0;
@@ -790,7 +812,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                 ucoord = ui(1,1);
                 vcoord = vi(1,1);
                 wcoord = vi(2,1);
-            else 
+            else
                 ucoord = ui(1,1) + ui(1,2) + ui(2,1) + ui(2,2);
                 vcoord = vi(1,1) + vi(1,2) + ui(3,1) + ui(3,2);
                 wcoord = vi(2,1) + vi(2,2) + vi(3,1) + vi(3,2);
@@ -816,7 +838,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                     vt3(3,:) = vt(contours(s,3),1:3);
                     t_hdl = patch('Faces',tri3,'Vertices',vt3,'FaceColor',[0.8,0.8,0.8]);
                     t_handles = [t_handles,t_hdl];
-                    
+
                 else
 %                     if (cns(s) == 5)
 %                         disp('triangulating case with 5 vertices');
@@ -827,7 +849,7 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                         vtStar(xq,:) = vt(contours(s,xq),1:3);
                     end
                     vtStar(cns(s)+1,:) =  [ucoord,vcoord,wcoord];
-                    
+
                     for xq=1:cns(s)
                         i0 = xq;
                         i1 = mod(xq,cns(s)) + 1;
@@ -839,12 +861,12 @@ function triangulateContours(cstate_,F,mc,i0,nrv,vt,nrc,cns,contours)
                     t_handles = [t_handles,t_hdl];
                 end
             end
-            
+
         end
         % store handles to manage geometry objects
-        
+
     end
-    
+
     % keep track of graphic obejcts
     cstate_('TrisHandles') = t_handles;
 end % triangulateContours
@@ -953,12 +975,12 @@ function f = transform(index,f)
     rot(22,:) = [4,2,8,6,3,1,7,5];
     rot(23,:) = [4,8,3,7,2,6,1,5];
     rot(24,:) = [7,5,3,1,8,6,4,2];
-   
+
     % transform f, unroll
     ft = zeros(1,8);
     ft(1:8) = f(1:8);
     for i=1:8
         f(i) = ft(rot(index,i));
     end
-    
+
 end

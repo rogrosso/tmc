@@ -1,14 +1,7 @@
+//  MarchingCubes.cpp
+//  Quitte
 //
 //  Created by Roberto Grosso on 05.06.16.
-//  Copyright © 2016 Roberto Grosso. All rights reserved.
-//
-
-#include "MarchingCubes.h"
-
-//
-//  MarchingCubes.cpp
-//
-//  Created by Roberto Grosso on 07/03/16.
 //  Copyright © 2016 Roberto Grosso. All rights reserved.
 //
 
@@ -19,7 +12,7 @@ void
 tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_objF,const std::string& o_offF)
 {
     std::cout << " ... reading data \n";
-    
+
     std::FILE* f = std::fopen(i_file.c_str(), "r");
     short x_size;
     short y_size;
@@ -51,7 +44,7 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
     bb[5] = Point{xmax,0,zmax};
     bb[6] = Point{0,ymax,zmax};
     bb[7] = Point{xmax,ymax,zmax};
-    
+
     m_ugrid.init(m_nx, m_ny, m_nz,bb);
     int m_size = m_nx * m_ny * m_nz;
     unsigned short* t_buff = new unsigned short[x_size*y_size*z_size];
@@ -61,29 +54,29 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
     }
     std::fclose(f);
     delete [] t_buff;
-    
-    
-    
+
+
+
     // compute gradient for normals
     m_ugrid.gradient();
     //m_ugrid.gradient();
-    
+
     // invert gradient
     //m_ugrid.invert_normals();
     m_ugrid.invert_normals();
-    
+
     // compute isosurface
     std::cout << " ... computing isosurface\n";
     t_mc(1000);
 
-    
+
     const int nr_v = (int)m_points.size();
     const int nr_t = (int)m_triangles.size();
-    
+
     std::cout << "tot. nr. of triangles: " << nr_t << std::endl;
     std::cout << "tot. nr. of vertices:  " << nr_v << std::endl;
-    
-    
+
+
     // Check mesh topology and correct triangle orientation if necessary
     std::cout << " ... check and correct triangle orientation\n";
     connectivity();
@@ -104,7 +97,7 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
         objF << "f " << (t.v[0]+1) << " " << (t.v[1]+1) << " " << (t.v[2]+1) << std::endl;
     }
     objF.close();
-    
+
     // write obj output file
     std::cout << " ... write OFF file\n";
     std::ofstream offF;
@@ -168,17 +161,17 @@ tmc::MarchingCubes::t_mc(const double i0)
     const int nx = m_ugrid.x_size();
     const int ny = m_ugrid.y_size();
     const int nz = m_ugrid.z_size();
-    
+
     // we need to compute up to 3 vertices at the interior of a cell, therefore
     // the cell shift factor is set to 3+3 = 6, i.e. 3 edges assigned to a cell for global numberig
     // and 3 vertices in the interior of the cell
     m_cell_shift_factor = 6;
-    
+
     // there can be at most 12 intersections
     std::vector<Vertex> vertices(12);
     std::vector<Point>  ip(12);
     std::vector<Normal> in(12);
-    
+
     timer.start();
     int i_case_count = 0;
     // marching cubes
@@ -204,7 +197,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                             if (u[vi] >= i0) {
                                 //index.set(VertexMapping[vi]);
                                 index.set(vi);
-                                
+
                             }
                             // probably better get normals here
                             n[vi] = m_ugrid.normal(i+il, j+jl, k+kl);
@@ -213,7 +206,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                         }
                     }
                 }
-                
+
                 // collect edges from table and
                 // interpolate triangle vertex positon
                 int i_case = int(index.to_ullong());
@@ -243,7 +236,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                             ip[eg][0] = (1 - l)*p[v0][0] + l*p[v1][0];
                             ip[eg][1] = (1 - l)*p[v0][1] + l*p[v1][1];
                             ip[eg][2] = (1 - l)*p[v0][2] + l*p[v1][2];
-                            
+
                             // interpolate normal
                             in[eg][0] = (1 - l)*n[v0][0] + l*n[v1][0];
                             in[eg][1] = (1 - l)*n[v0][1] + l*n[v1][1];
@@ -252,7 +245,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                             in[eg][0] = in[eg][0] / nlength;
                             in[eg][1] = in[eg][1] / nlength;
                             in[eg][2] = in[eg][2] / nlength;
-                            
+
                             // set vertex index
                             auto s_index = m_vertices.find(vertices[eg].g_edg);
                             if (s_index == m_vertices.end()) {
@@ -268,7 +261,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                         }
                         flag <<=1;
                     }
-                    
+
                     // construct triangles
                     for (int t = 0; t < 16; t += 3) {
                         const int t_index = i_case * 16 + t;
@@ -288,7 +281,7 @@ tmc::MarchingCubes::t_mc(const double i0)
                         tri.v[0] = (int)vertices[eg0].g_idx;
                         tri.v[1] = (int)vertices[eg1].g_idx;
                         tri.v[2] = (int)vertices[eg2].g_idx;
-                        
+
                         // insert new triangle in list
                         m_triangles.push_back(tri);
                     }
@@ -296,10 +289,10 @@ tmc::MarchingCubes::t_mc(const double i0)
             }
         }
     }
-    
+
     timer.stop();
     timer.print();
-    
+
     std::cout << "tot. nr. of vertices:        " << m_points.size()    << std::endl;
     std::cout << "tot. nr. of triangles:       " << m_triangles.size() << std::endl;
     std::cout << "tot. nr. of specials cases:  " << i_case_count << std::endl;
@@ -326,7 +319,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
     unsigned short face_e_[6] = {12816, 30292, 33936, 46754, 34739, 38305};
     const int face_v[6][4] = {{0,1,2,3},{4,5,6,7},{0,1,4,5},{2,3,6,7},{0,2,4,6},{1,3,5,7}};
     unsigned short face_v_[6] = {12816, 30292, 21520, 30258, 25632, 30001};
-    
+
     // there are 12 edges, assign to each vertex three edges, the global edge numbering
     // consist of 3*global_vertex_id + edge_offset.
     const int global_edge_id[][4] = {{0,0,0,0},{1,0,0,1},{0,1,0,0},{0,0,0,1},
@@ -343,13 +336,13 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
     std::vector<Point>  ip(12);
     std::vector<Normal> in(12);
     std::vector<double> ecoord(12); // there are 12 coordinates along the edges, these are the intersections
-    
-    
-    
+
+
+
     // debugging
     //    const int nr_vr_0 = m_tvertices.size();
     //    const int nr_tr_0 = m_ttriangles.size();
-    
+
     // collect vertices
     ushort   flag{1};
     for (int eg = 0; eg < 12; eg++) {
@@ -372,7 +365,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             ip[eg][0] = (1 - l)*p[v0][0] + l*p[v1][0];
             ip[eg][1] = (1 - l)*p[v0][1] + l*p[v1][1];
             ip[eg][2] = (1 - l)*p[v0][2] + l*p[v1][2];
-            
+
             // interpolate normal
             in[eg][0] = (1 - l)*n[v0][0] + l*n[v1][0];
             in[eg][1] = (1 - l)*n[v0][1] + l*n[v1][1];
@@ -381,7 +374,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             in[eg][0] = in[eg][0] / nlength;
             in[eg][1] = in[eg][1] / nlength;
             in[eg][2] = in[eg][2] / nlength;
-            
+
             // set vertex index
             auto s_index = m_vertices.find(vertices[eg].g_edg);
             if (s_index == m_vertices.end()) {
@@ -399,7 +392,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
         //next edge
         flag <<=1;
     }
-    
+
     // build up segments
     int segments[12][2] = {{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1}};
     int spos[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
@@ -432,13 +425,13 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                 segments[face_e[f][3]][spos[face_e[f][3]]]   = face_e[f][0];
                 segments[face_e[f][1]][spos[face_e[f][1]]]   = face_e[f][2];
                 segments[face_e[f][2]][spos[face_e[f][2]]]   = face_e[f][1];
-                
+
             } else {
                 segments[face_e[f][0]][spos[face_e[f][0]]]   = face_e[f][1];
                 segments[face_e[f][1]][spos[face_e[f][1]]]   = face_e[f][0];
                 segments[face_e[f][2]][spos[face_e[f][2]]]   = face_e[f][3];
                 segments[face_e[f][3]][spos[face_e[f][3]]]   = face_e[f][2];
-                
+
             }
             spos[face_e[f][0]] += 1;
             spos[face_e[f][1]] += 1;
@@ -446,7 +439,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             spos[face_e[f][3]] += 1;
         }
     } //
-    
+
     // there might give at most 4 counturs with a maximum of 9 vertices
     int contours[4][14] = {{-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1},
         {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1},
@@ -457,7 +450,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
     for (int e = 0; e < 12; e++) {
         if (segments[e][0] == -1)
             continue;
-        
+
         contours[cnt][0] = e;
         int se = e;
         contours[cnt][1] = segments[e][0];
@@ -484,9 +477,9 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                 break;
             }
         }
-        
+
     }
-    
+
     // compute intersection of opposite faces
     double ui[3][2];
     double vi[3][2];
@@ -536,8 +529,8 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             }
         }
     }
-    
-    
+
+
     // compute size of contours
     int csz[4] = {0,0,0,0};
     for (int i = 0; i < cnt; i++) {
@@ -546,12 +539,12 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             pos++;
         csz[i] = pos-1;
     }
-    
+
     // triangulate contours
     // cnt is the number of contours, the last vertex is equal the first indicating the closed
     // contour, then there is a -1
     int tc = ic[0] + ic[1] + ic[2];
-    
+
     // debugging
     auto c_index = [](Triangle& t) {
         if (t.v[0] == t.v[1])
@@ -562,7 +555,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
             return false;
         return true;
     };
-    
+
     // check if there is a tunnel or a contour with 12 vertices
     bool btunnel[] = {false,false,false,false};
     if (tc == 6) {
@@ -622,7 +615,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
         cvt[0][0] = u; cvt[0][1] = v; cvt[0][2] = w;
         // face 3,4 and face 5,6 common coord is w
         p3 = (std::fabs(w - vi[2][1]) < 0.000001) ? 1 : 0;
-        
+
         // connect alternating in p1, p2 and p3
         // get new v coordinate from face 4,5
         v = ui[2][p3];
@@ -643,7 +636,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
         p1 = (p1+1)%2;
         u = ui[0][p1];
         cvt[5][0] = u; cvt[5][1] = v; cvt[5][2] = w; //cvt(6,:) = [u,v,w];
-        
+
         // compute triangulation
         // needs the space hexagon
         Point hex_p[6];
@@ -674,13 +667,13 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                      + w*(1-v)*(1-u)*n[4][1] + w*(1-v)*u*n[5][1] + w*v*(1-u)*n[6][1] + w*v*u*n[7][1];
             tn[t][2] = (1-w)*(1-v)*(1-u)*n[0][2] + (1-w)*(1-v)*u*n[1][2] + (1-w)*v*(1-u)*n[2][2] + (1-w)*v*u*n[3][2]
                      + w*(1-v)*(1-u)*n[4][2] + w*(1-v)*u*n[5][2] + w*v*(1-u)*n[6][2] + w*v*u*n[7][2];
-            
+
             tg_edg[t] = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + (3+t)); // this is the first interior vertex
             tg_idx[t] = (int)m_points.size();
             m_points.push_back(tv[t]);
             m_pnorms.push_back(tn[t]);
         }
-        
+
         // triangulate:
         // 1. collect vertex pairs by using distance
         // 2. triangulate
@@ -704,7 +697,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                 dedgin[contours[t][r]] = index;
             }
         }
-        
+
         // triangulate
         for (int t = 0; t < cnt; t++) {
             if (!btunnel[t])
@@ -843,7 +836,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                         m_triangles.push_back(tri62);
                         m_triangles.push_back(tri63);
                         m_triangles.push_back(tri64);
-                        
+
                 } // switch (csz(t))
             }
         } else {
@@ -872,7 +865,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                 u = u/(ic[0] + ic[1]);
                 v = v/(ic[0] + ic[2]);
                 w = w/(ic[1] + ic[2]);
-                
+
             }
             // compute vertex: trilinear interpolate
             Point cv{0,0,0};
@@ -883,14 +876,14 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                   + w*((1-v)*((1-u)*p[4][1]+u*p[5][1]) + v*((1-u)*p[6][1]+u*p[7][1]));
             cv[2] = (1-w)*((1-v)*((1-u)*p[0][2]+u*p[1][2]) + v*((1-u)*p[2][2]+u*p[3][2]))
                   + w*((1-v)*((1-u)*p[4][2]+u*p[5][2]) + v*((1-u)*p[6][2]+u*p[7][2]));
-            
+
             cn[0] = (1-w)*((1-v)*((1-u)*n[0][0]+u*n[1][0]) + v*((1-u)*n[2][0]+u*n[3][0]))
                   + w*((1-v)*((1-u)*n[4][0]+u*n[5][0]) + v*((1-u)*n[6][0]+u*n[7][0]));
             cn[1] = (1-w)*((1-v)*((1-u)*n[0][1]+u*n[1][1]) + v*((1-u)*n[2][1]+u*n[3][1]))
                   + w*((1-v)*((1-u)*n[4][1]+u*n[5][1]) + v*((1-u)*n[6][1]+u*n[7][1]));
             cn[2] = (1-w)*((1-v)*((1-u)*n[0][2]+u*n[1][2]) + v*((1-u)*n[2][2]+u*n[3][2]))
                   + w*((1-v)*((1-u)*n[4][2]+u*n[5][2]) + v*((1-u)*n[6][2]+u*n[7][2]));
-        
+
             bool flag = false;
             for (int s = 0; s < cnt; s++) { // for each contour
                 if (csz[s] == 3) {
@@ -943,7 +936,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
                             std::cout << "ERROR: wrong contour length: " << csz[s] << std::endl;
                             break;
                     }
-                    
+
                 }
 
             }
@@ -960,11 +953,11 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //{
 //    unsigned short face_e_[6] = {12816, 30292, 33936, 46754, 34739, 38305};
 //    unsigned short face_v_[6] = {12816, 30292, 21520, 30258, 25632, 30001};
-//    
+//
 //    // reading edge from face
 //    auto get_face_e = [face_e_](const int f,const int e) { return ((face_e_[f]>>(4*e))&0xF); };
 //    auto get_face_v = [face_v_](const int f,const int e) { return ((face_v_[f]>>(4*e))&0xF); };
-//    
+//
 //    // there are 12 edges, assign to each vertex three edges, the global edge numbering
 //    // consist of 3*global_vertex_id + edge_offset.
 //    const unsigned long long gei_pattern_ = 670526590282893600ull;
@@ -988,12 +981,12 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //    std::vector<Point>  ip(12);
 //    std::vector<Normal> in(12);
 //    std::vector<double> ecoord{0,0,0,0,0,0,0,0,0,0,0,0}; // there are 12 coordinates along the edges, these are the intersections
-//    
-//    
+//
+//
 //    // edge intersection pattern
 //    const ushort e_pattern_ = edge_pattern[i_case];
-//    
-//    
+//
+//
 //    // collect vertices
 //    ushort   flag{1};
 //    for (int eg = 0; eg < 12; eg++) {
@@ -1006,9 +999,9 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //            const int iy = j + (int)((gei_pattern_>>(shift+1))&1); // global_edge_id[eg][1];
 //            const int iz = k + (int)((gei_pattern_>>(shift+2))&1); // global_edge_id[eg][2];
 //            const int off_val = (int)((gei_pattern_>>(shift+3))&3);
-//            
+//
 //            vertices[eg].g_edg = int(m_cell_shift_factor*m_ugrid.global_index(ix, iy, iz) + off_val);
-//            
+//
 //            // generate vertex here, do not care at this point if vertex already exist
 //            //int* vert = l_edges[eg];
 //            // interpolation weight
@@ -1040,7 +1033,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //        }
 //        flag <<=1;
 //    }
-//    
+//
 //    // build up segments
 //    unsigned char segm_[12]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 //    auto set_segm = [] (const int& e, const int& val,unsigned char segm_[12]) {
@@ -1055,7 +1048,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //        else
 //            return (int)(segm_[e]&0xF);
 //    };
-//    
+//
 //    for (int f = 0; f < 6; f++) {
 //        int pos = 0;
 //        int p_ = 0;
@@ -1072,7 +1065,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //                s_ &= 0x0FFF^(e<<12);
 //        };
 //        auto get_e = [] (const int p,unsigned short s_) { return (int)((s_>>(4*p))&0xF); };
-//        
+//
 //        for (int eg = 0; eg < 4; eg++) {
 //            ushort eid_ = get_face_e(f,eg);
 //            if ((e_pattern_>>eid_)&1) {
@@ -1080,7 +1073,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //                set_e(eid_,s_);
 //            }
 //        }
-//        
+//
 //        // test new revolutionary method
 //        if (p_ == 2) {
 //            set_segm(get_e(0,s_),get_e(1,s_),segm_);
@@ -1105,7 +1098,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //            }
 //        }
 //    } //
-//    
+//
 //    unsigned long long c_ = 0xFFFFFFFFFFFFFFFF;
 //    auto set_c = [] (const int e,const int val,unsigned long long &c_) {
 //        c_ &= ~(0xFull<<(e*4));
@@ -1121,12 +1114,12 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //        if (segm_[e] == 0xFF) {
 //            continue;
 //        }
-//        
+//
 //        // contour found
 //        unsigned char le = get_segm(e,0,segm_);
 //        unsigned char ce = e;
 //        unsigned char ne = get_segm(e,1,segm_);
-//        
+//
 //        set_c(pos_+c_sz[cnt_],le,c_);
 //        set_c(pos_+c_sz[cnt_]+1,ce,c_);
 //        set_c(pos_+c_sz[cnt_]+2,ne,c_);
@@ -1160,9 +1153,9 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //                c_sz[cnt_] += 1;
 //            }
 //        }
-//        
+//
 //    }
-//    
+//
 //    // compute intersection of opposite faces
 //    double ui[3][2];
 //    double vi[3][2];
@@ -1212,13 +1205,13 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //            }
 //        }
 //    }
-//    
-//    
+//
+//
 //    // triangulate contours
 //    // cnt is the number of contours, the last vertex is equal the first indicating the closed
 //    // contour, then there is a -1
 //    int tc = ic[0] + ic[1] + ic[2];
-//    
+//
 //    // check if there is a tunnel or a contour with 12 vertices
 //    bool tun_[4] = {false,false,false,false};
 //    if (tc == 6) {
@@ -1285,7 +1278,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //        cvt[0][0] = u; cvt[0][1] = v; cvt[0][2] = w;
 //        // face 3,4 and face 5,6 common coord is w
 //        p3 = (std::fabs(w - vi[2][1]) < 0.00005) ? 1 : 0;
-//        
+//
 //        // connect alternating in p1, p2 and p3
 //        // get new v coordinate from face 4,5
 //        v = ui[2][p3];
@@ -1306,7 +1299,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //        p1 = (p1+1)%2;
 //        u = ui[0][p1];
 //        cvt[5][0] = u; cvt[5][1] = v; cvt[5][2] = w; //cvt(6,:) = [u,v,w];
-//        
+//
 //        // compute triangulation
 //        // needs the space hexagon
 //        Point hex_p[6];
@@ -1325,7 +1318,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //            // compute normals
 //            u = (cvt[2*t][0]+cvt[2*t+1][0])/2; v = (cvt[2*t][1]+cvt[2*t+1][1])/2; w = (cvt[2*t][2]+cvt[2*t+1][2])/2;
 //            tn[t] = (1-w)*(1-v)*(1-u)*n[0] + (1-w)*(1-v)*u*n[1] + (1-w)*v*(1-u)*n[2] + (1-w)*v*u*n[3] + w*(1-v)*(1-u)*n[4] + w*(1-v)*u*n[5] + w*v*(1-u)*n[6] + w*v*u*n[7];
-//            
+//
 //            tg_edg[t] = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + (3+t)); // this is the first interior vertex
 //            tg_idx[t] = set_tvertex(tg_edg[t]);
 //            if (tg_idx[t] == -1) {
@@ -1340,7 +1333,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //                m_ehash[hashbucket_index(m_nbuckets, tg_edg[t])].push_back(ev);
 //            }
 //        }
-//        
+//
 //        // triangulate:
 //        unsigned char tcon_[12];
 //        pos_ = 0;
@@ -1365,7 +1358,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //            }
 //            pos_ += c_sz[t];
 //        }
-//        
+//
 //        // triangulate
 //        pos_ = 0;
 //        for (int t = 0; t < cnt_; t++) {
@@ -1376,7 +1369,7 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //                    uint tid2 = get_c(pos_+((r+1)%c_sz[t]),c_);
 //                    uint cid1 = tcon_[tid1];
 //                    uint cid2 = tcon_[tid2];
-//                    
+//
 //                    if (cid1 == cid2 ) {
 //                        Triangle tr;
 //                        tr.v[0] = vertices[tid1].g_idx;
@@ -1874,7 +1867,7 @@ tmc::MarchingCubes::UGrid::set(const int nx,const int ny,const int nz,float* tmp
     // initialize scalar fields
     m_scalars.resize(tot_size,0);
     m_normals.resize(tot_size);
-    
+
     // create bounding box
     // fastest index is x, then y and slowest index is z
     for(int i = 0; i <= 1; i++) {
@@ -1885,7 +1878,7 @@ tmc::MarchingCubes::UGrid::set(const int nx,const int ny,const int nz,float* tmp
             }
         }
     }
-    
+
     for (int i = 0; i < tot_size; i++) {
         m_scalars[i] = (double) tmp_a[i];
     }
@@ -2022,11 +2015,11 @@ tmc::MarchingCubes::UniformGrid::interpolate_scalar(const Point& p)
         const double s110 = m_scalars[gindex];
         gindex = global_index(i+1,j+1,k+1);
         const double s111 = m_scalars[gindex];
-        
+
         val = (1-w)*((1-v)*((1-u)*s000 + u*s001) + v*((1-u)*s010 + u*s011))
         + w*((1-v)*((1-u)*s100 + u*s101) + v*((1-u)*s110 + u*s111));
     }
-    
+
     return val;
 }
 
@@ -2066,7 +2059,7 @@ tmc::MarchingCubes::UniformGrid::interpolate_normal(const Point& p, Normal& n)
         Normal n110 = m_normals[gindex];
         gindex = global_index(mod(i+1,m_nx),mod(j+1,m_ny),mod(k+1,m_nz));
         Normal n111 = m_normals[gindex];
-        
+
         n[0] = (1-w)*((1-v)*((1-u)*n000[0]+ u*n001[0]) + v*((1-u)*n010[0] + u*n011[0]))
              + w*((1-v)*((1-u)*n100[0] + u*n101[0]) + v*((1-u)*n110[0] + u*n111[0]));
         n[1] = (1-w)*((1-v)*((1-u)*n000[1]+ u*n001[1]) + v*((1-u)*n010[1] + u*n011[1]))
@@ -2109,7 +2102,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //                                                      std::vector<std::vector<float>>& tc, std::vector<std::vector<uint>>&  te,
 //                                                      std::vector<float>& points,std::vector<float>& pnorms)
 //{
-//    
+//
 //    double xmax = 1;
 //    double ymax = 1;
 //    double zmax = 0.3 / 0.4;
@@ -2166,17 +2159,17 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //    bbox_e[pos++]  = 1; bbox_e[pos++] = 3;
 //    bbox_e[pos++]  = 3; bbox_e[pos++] = 2;
 //    bbox_e[pos++]  = 2; bbox_e[pos++] = 0;
-//    
+//
 //    bbox_e[pos++]  = 4; bbox_e[pos++] = 5;
 //    bbox_e[pos++]  = 5; bbox_e[pos++] = 7;
 //    bbox_e[pos++]  = 7; bbox_e[pos++] = 6;
 //    bbox_e[pos++]  = 6; bbox_e[pos++] = 4;
-//    
+//
 //    bbox_e[pos++]  = 0; bbox_e[pos++] = 4;
 //    bbox_e[pos++]  = 1; bbox_e[pos++] = 5;
 //    bbox_e[pos++]  = 3; bbox_e[pos++] = 7;
 //    bbox_e[pos++]  = 2; bbox_e[pos++] = 6;
-//    
+//
 //    // create scalar field
 //    int mc = 105;
 //    std::array<double,8> F{};
@@ -2221,8 +2214,8 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //    } else if (mc == 25) {
 //        F = std::array<double,8>{9.9998593195995547,9.9993381282115549,9.9979160205452544,9.9986053863704142,9.9999374908631235,9.999424800002032,9.9983922749132219,9.999579324965488};
 //    }
-//    
-//    
+//
+//
 //    // apply rotation
 //    //    double rot1[] = {4,5,0,1,6,7,2,3};
 //    //    double rot2[] = {1,3,0,2,5,7,4,6};
@@ -2236,7 +2229,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //    //        rF[i] = F[rot2[i]];
 //    //    }
 //    //    F = rF;
-//    
+//
 //    // discretize cell and compute isosurfaces
 //    // init uniform grid
 //    std::array<Point,8> bb{Point{0,0,0},Point{1,0,0},Point{0,1,0},Point{1,1,0},Point{0,0,zmax},Point{1,0,zmax},Point{0,1,zmax},Point{1,1,zmax}};
@@ -2245,7 +2238,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //    double du = 1. / (grsz-1.);
 //    double dv = du;
 //    double dw = du;
-//    
+//
 //    double u = 0;
 //    for (int i = 0; i < grsz; i++) {
 //        double v = 0;
@@ -2260,9 +2253,9 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //        }
 //        u += du;
 //    }
-//    
+//
 //    m_ugrid.gradient();
-//    
+//
 //    // set grid for tcm
 //    m_ugrid.init(2,2,2,bb);
 //    std::bitset<3> t_index;
@@ -2277,8 +2270,8 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //        }
 //    }
 //    m_ugrid.gradient();
-//    
-//    
+//
+//
 //    //double i0 = 9.99946; // case 60
 //    //double i0 = 9.9994608191478135; // case 145, i.e 25
 //    double i0 = 1000.;
@@ -2290,7 +2283,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //        if (f < i0 && f > maxv) maxv = f;
 //        if (f > i0 && f < minv) minv = f;
 //    }
-//    
+//
 //    // compute isosurfaces
 //    int nIso = 1;
 //    // generate nIso colors
@@ -2318,7 +2311,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //    tn.resize(nIso);
 //    tc.resize(nIso);
 //    te.resize(nIso);
-//    
+//
 //    double di0 = (minv - maxv) / (nIso+1.);
 //    double isov = maxv + di0;
 //    for (int s = 0 ; s < nIso; s++) {
@@ -2339,11 +2332,11 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //            v[s][3*id]     = (float)vt->p[0];
 //            v[s][3*id + 1] = (float)vt->p[1];
 //            v[s][3*id + 2] = (float)vt->p[2];
-//            
+//
 //            n[s][3*id]     = -(float)vt->n[0];
 //            n[s][3*id + 1] = -(float)vt->n[1];
 //            n[s][3*id + 2] = -(float)vt->n[2];
-//            
+//
 //            c[s][3*id]   = colors[s][0];
 //            c[s][3*id+1] = colors[s][1];
 //            c[s][3*id+2] = colors[s][2];
@@ -2360,7 +2353,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //            e[s][3*count + 2] = t.v[2];
 //            count++;
 //        }
-//        
+//
 //        // compute cell intersection
 //        t_mc(isov);
 //        const size_t nr_tv = m_tvertices.size();
@@ -2375,15 +2368,15 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //                tv[s][3*id]     = (float)vt.p[0];
 //                tv[s][3*id + 1] = (float)vt.p[1];
 //                tv[s][3*id + 2] = (float)vt.p[2];
-//                
+//
 //                tn[s][3*id]     = -(float)vt.n[0];
 //                tn[s][3*id + 1] = -(float)vt.n[1];
 //                tn[s][3*id + 2] = -(float)vt.n[2];
-//                
+//
 //                tc[s][3*id]   = colors[s][0];
 //                tc[s][3*id+1] = colors[s][1];
 //                tc[s][3*id+2] = colors[s][2];
-//                
+//
 //            }
 //            count = 0;
 //            for (auto t : m_ttriangles) {
@@ -2393,7 +2386,7 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //                count++;
 //            }
 //        }
-//        
+//
 //        // check if there are points
 //        size_t nr_pts = m_points.size();
 //        if (nr_pts > 0) {
@@ -2412,11 +2405,11 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
 //        }
 //        // update isovalue
 //        isov += di0;
-//        
+//
 //        // clear all values
 //        clear_all();
 //    }
-//    
+//
 //}
 
 
@@ -2433,21 +2426,21 @@ void tmc::MarchingCubes::connectivity( )
             return false;
         return true;
     };
-    
+
     // assign triangle to pos in triangle array
     for (int t = 0; t < (int)m_triangles.size(); t++) {
         m_triangles[t].id = t;
         if (!c_index(m_triangles[t])) {
             std::cout << "triangle " << t << ", has two vertices equal: " << m_triangles[t].v[0] << ", " << m_triangles[t].v[1] << ", " << m_triangles[t].v[2] << std::endl;
         }
-        
+
     }
     // check vertices ids
     m_vboundary.resize(nr_v);
     for (int i = 0; i < nr_v; i++) {
         m_vboundary[i] = false;
     }
-    
+
     // reorient triangles
     std::vector<std::vector<int>> v_tris(nr_v);
     for (auto t : m_triangles) {
@@ -2455,7 +2448,7 @@ void tmc::MarchingCubes::connectivity( )
         v_tris[t.v[1]].push_back(t.id);
         v_tris[t.v[2]].push_back(t.id);
     }
-    
+
     // check vertex fan
     for (int v = 0; v < nr_v; v++) {
         std::vector<int> v_fan;
@@ -2487,7 +2480,7 @@ void tmc::MarchingCubes::connectivity( )
             v_neigh[v_fan.size()-1] = 2;
         else
             v_neigh[v_fan.size()-1] = 1;
-        
+
         // check nr. of vertices
         int v_one{0};
         for (auto n : v_neigh) {
@@ -2502,20 +2495,20 @@ void tmc::MarchingCubes::connectivity( )
             std::cout << "ERROR: wrong number of neighbors\n";
         }
     }
-    
-    
+
+
     auto v_compare = [] (const int v1,const int v2, const int t0,const int t1,const int t2) {
         bool face0 = (v1 == t1 && v2 == t2) || (v1 == t2 && v2 == t1);
         bool face1 = (v1 == t0 && v2 == t2) || (v1 == t2 && v2 == t0);
         bool face2 = (v1 == t1 && v2 == t0) || (v1 == t0 && v2 == t1);
-        
+
         if (face0 || face1 || face2) {
             return true;
         } else {
             return false;
         }
     };
-    
+
     // create face neighbors
     // loop over all triangle and set neighors
     std::vector<std::array<int,3>> t_neigh(m_triangles.size());
@@ -2526,8 +2519,8 @@ void tmc::MarchingCubes::connectivity( )
         t_neigh[t.id][0] = -1;
         t_neigh[t.id][1] = -1;
         t_neigh[t.id][2] = -1;
-        
-        
+
+
         // face 0
         bool t_topol{false};
         bool f_neigh{false};
@@ -2553,7 +2546,7 @@ void tmc::MarchingCubes::connectivity( )
             }
         }
         t_topol = f_neigh;
-        
+
         // face 1
         for (auto tt : v_tris[t.v[2]]) {
             if (tt == t.id)
@@ -2577,7 +2570,7 @@ void tmc::MarchingCubes::connectivity( )
             }
         }
         t_topol = f_neigh;
-        
+
         // face 2
         for (auto tt : v_tris[t.v[0]]) {
             if (tt == t.id)
@@ -2601,12 +2594,12 @@ void tmc::MarchingCubes::connectivity( )
             }
         }
         t_topol = f_neigh;
-        
+
         if (!t_topol) {
             std::cout << "ERROR: triangle " << t.id << " has no neighbor at face\n";
         }
     }
-    
+
     // check neighborhood
     for (auto t : m_triangles) {
         int v0 = t.v[0];
@@ -2640,8 +2633,8 @@ void tmc::MarchingCubes::connectivity( )
             }
         }
     }
-    
-    
+
+
     // Check and compute triangle orientation
     std::vector<bool> t_oriented(m_triangles.size(),false);
     std::stack<int> t_queue;
@@ -2653,7 +2646,7 @@ void tmc::MarchingCubes::connectivity( )
         bool face0 = (v1 == t2 && v2 == t1);
         bool face1 = (v1 == t0 && v2 == t2);
         bool face2 = (v1 == t1 && v2 == t0);
-        
+
         if (face0 || face1 || face2) {
             return true;
         }
@@ -2675,7 +2668,7 @@ void tmc::MarchingCubes::connectivity( )
         std::cout << "ERROR: can't change or test triangle orientation\n";
         return false;
     };
-    
+
     int t_nrcomps{0};
     for (auto t : m_triangles) {
         if (t_oriented[t.id] == true) {
@@ -2707,7 +2700,7 @@ void tmc::MarchingCubes::connectivity( )
             t_compare(v2,v0,m_triangles[n1]);
             t_queue.push(n1);
         }
-        
+
         // face 2
         if (n2 != -1) {
             if (t_oriented[n2])
@@ -2747,13 +2740,13 @@ void tmc::MarchingCubes::connectivity( )
             } // if () // triangle still not processed
         } // while
     }
-    
+
     // check orientation
     auto t_checko = [](const int v1,const int v2, const int t0,const int t1, const int t2) {
         bool face0 = (v1 == t2 && v2 == t1);
         bool face1 = (v1 == t0 && v2 == t2);
         bool face2 = (v1 == t1 && v2 == t0);
-        
+
         if (face0 || face1 || face2) {
             return true;
         } else {
@@ -2775,7 +2768,7 @@ void tmc::MarchingCubes::connectivity( )
                 std::cout << "ERROR: neighbor n0 not oriented for t " << t.id << std::endl;
             }
         }
-        
+
         if (n1 != -1) {
             const int t0 = m_triangles[n1].v[0];
             const int t1 = m_triangles[n1].v[1];
@@ -2784,7 +2777,7 @@ void tmc::MarchingCubes::connectivity( )
                 std::cout << "ERROR: neighbor n1 not oriented for t " << t.id << std::endl;
             }
         }
-        
+
         if (n2 != -1) {
             const int t0 = m_triangles[n2].v[0];
             const int t1 = m_triangles[n2].v[1];
@@ -2794,10 +2787,10 @@ void tmc::MarchingCubes::connectivity( )
             }
         }
     }
-    
+
     std::cout << " connectivity has changed " << nr_ocorrections << " triangle orientations\n";
     std::cout << " connectivity found " << t_nrcomps << " components" << std::endl;
-    
+
 }
 
 
@@ -2810,7 +2803,7 @@ void tmc::MarchingCubes::connectivity( )
 //    m_nx = 128;
 //    m_ny = 128;
 //    m_nz = 128;
-//    
+//
 //    // set domain
 //    std::array<Point, 8> bb;
 //    bb[0] = Point{0,0,0};
@@ -2821,7 +2814,7 @@ void tmc::MarchingCubes::connectivity( )
 //    bb[5] = Point{1,0,1};
 //    bb[6] = Point{0,1,1};
 //    bb[7] = Point{1,1,1};
-//    
+//
 //    m_ugrid.init(m_nx, m_ny, m_nz,bb);
 //    m_dx = m_ugrid.dx();
 //    m_dy = m_ugrid.dy();
@@ -2844,7 +2837,7 @@ void tmc::MarchingCubes::connectivity( )
 //        //        return std::exp(-beta*val1) + std::exp(-beta*val2) + std::exp(-beta*val3) + std::exp(-beta*val4);
 //        return 2*y*(y*y - 3*x*x)*(1-z*z) + (x*x+y*y)*(x*x+y*y) - (9*z*z -1) * (1-z*z);
 //    };
-//    
+//
 //    int m_size = m_nx * m_ny * m_nz;
 //    int x_size = m_nx;
 //    int y_size = m_ny;
@@ -2864,29 +2857,29 @@ void tmc::MarchingCubes::connectivity( )
 //        }
 //        z = z + m_dz;
 //    }
-//    
-//    
+//
+//
 //    // compute gradient for normals
 //    m_ugrid.gradient();
 //    // invert gradient
 //    //m_ugrid.invert_normals();
-//    
+//
 //    // compute isosurface
 //    std::cout << " ... computing isosurface\n";
 //    const double i0 = 0.4;
 //    t_mc(i0);
-//    
-//    
+//
+//
 //    bool t_cm = true;
 //    std::cout << " ... copy data" << std::endl;
 //    timer.start();
 //    if (t_cm) {
 //        nr_v = (int)m_tvertices.size();
 //        nr_t = (int)m_ttriangles.size();
-//        
+//
 //        std::cout << "tot. nr. of triangles: " << nr_t << std::endl;
 //        std::cout << "tot. nr. of vertices:  " << nr_v << std::endl;
-//        
+//
 //        *vertices  = new float[4*nr_v];
 //        *normals   = new float[4*nr_v];
 //        *triangles = new int[4*nr_t];
@@ -2906,7 +2899,7 @@ void tmc::MarchingCubes::connectivity( )
 //            vcount++;
 //            //t_vt[id]++;
 //        }
-//        
+//
 //        int count = 0;
 //        for (auto t : m_ttriangles) {
 //            (*triangles)[4*count]     = t.v[0];
@@ -2956,9 +2949,9 @@ void tmc::MarchingCubes::connectivity( )
 //            (*triangles)[4*count + 2] = t.v[2];
 //            count++;
 //        }
-//        
+//
 //    }
-//    
+//
 //    // create a halfedge mesh
 //    reconstruct(true, mesh);
 //    // analize mesh data
