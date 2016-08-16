@@ -48,14 +48,90 @@
 #include <bitset>
 #include <algorithm>
 #include <random>
+#include <chrono>
 
 
 namespace tmc {
     /** Computes a topologically correct and manifolg isosurface
      *  from an uniform grid.
+	 *  # Element topology
+	 *  The numbering of vertices is given by vertex coordinates of a unit reference hexahedron. Edges
+	 *  are given by their end vertices. There are alos lists with the face-vertex and face-edge correspondences.
+	 *  ## Vertices
+	 *  - v0 = (0,0,0)
+	 *  - v1 = (1,0,0)
+	 *  - v2 = (1,0,0)
+	 *  - v3 = (1,0,0)
+	 *  - v4 = (1,0,0)
+	 *  - v5 = (1,0,0)
+	 *  - v6 = (1,0,0)
+	 *  - v7 = (1,0,0)
+	 *
+	 *  ## Edges
+	 *  - e0 = {0,1}
+	 *  - e1 = {1,3}
+	 *  - e2 = {2,3}
+	 *  - e3 = {0,2}
+     *  - e4 = {4,5}
+	 *  - e5 = {5,7}
+	 *  - e6 = {6,7}
+	 *  - e7 = {4,6}
+     *  - e8 = {0,4}
+	 *  - e9 = {1,5}
+	 *  - e10 = {3,7}
+	 *  - e11 = {2,6}
+	 *
+	 *  ## Face-Edge correspondence
+	 *  The order of the entries in the list corresponds to the orientation of the face
+	 *  - f0 = {0,1,2,3}
+	 *  - f1 = {4,5,6,7}
+	 *  - f2 = {0,9,4,8}
+	 *  - f3 = {2,10,6,11}
+	 *  - f4 = {3,11,7,8}
+	 *  - f5 = {1,10,5,9}
+	 *
+	 *  ## Face-Vertex correspondence
+	 *  - f0 = {0,1,2,3}
+	 *  - f1 = {4,5,6,7}
+	 *  - f2 = {0,1,4,5}
+	 *  - f3 = {2,3,6,7}
+	 *  - f4 = {0,2,4,6}
+	 *  - f5 = {1,3,5,7}
+	 *
+	 *  ## Orientation of contours
+	 *  In order to construct contour which are oriented such that positive vertices are outside 
+	 *  we describes faces as been seeing from outside the hexahedron. In this case, the numbering 
+	 *  used to collect vertices for a face is as follows:
+	 *  ### Oriented numbering of Face-Vertex correspondence
+	 *  This correspondence is used to compute the intersection of the isosurface with the face
+	 *  of the hexahedron and orient the segments such that positive vertices are outside the 
+	 *  contour
+	 *  - f0 = {0,2,1,3}
+	 *  - f1 = {5,7,4,6}
+	 *  - f2 = {4,0,5,1}
+	 *  - f3 = {2,6,3,7}
+	 *  - f4 = {4,6,0,2}
+	 *  - f5 = {1,3,5,7}
+	 *
+	 *   ### Oriented numbering of Face-Edge correspondence
+	 *  - f0 = {3,2,1,0}
+	 *  - f1 = {5,6,7,4}
+	 *  - f2 = {8,0,0,4}
+	 *  - f3 = {11,6,10,2}
+	 *  - f4 = {7,11,3,8}
+	 *  - f5 = {1,10,5,9}
+	 *
+	 *  # Remark
+	 *  The function `p_slice()` implements a new version of the algorithm to intersect the iso-surface 
+	 *  with a cell. It uses the six inner vertices for the triangulation in the case of a tunnel or a 
+	 *  single contour with 12 vertices. Furtheremore, contours are computed in an oriented way such that 
+	 *  positive vertices are outside the contour.
      */
     class MarchingCubes {
     public:
+		using uchar = unsigned char;
+		using ushort = unsigned short;
+		using uint = unsigned int;
         using Scalar = double;
         using Index  = std::array<int,3>;
         using Point  = std::array<double,3>;
@@ -130,7 +206,7 @@ namespace tmc {
              *  @param[in] i cell index along x-coordinate
              *  @return _Point_ with coordinates of vertex {i,j,k}
              */
-            Point point(const int i, const int j, const int k) { return Point{m_bbox[0][0] + i*m_dx,m_bbox[0][1] + j*m_dy,m_bbox[0][2] + k*m_dz}; }
+			Point point(const int i, const int j, const int k) { return Point{ { m_bbox[0][0] + i*m_dx, m_bbox[0][1] + j*m_dy, m_bbox[0][2] + k*m_dz } }; }
 
             /// Set the scalar value at grid node using node's global index.
             void scalar(const int gindex,const double val) { m_scalars[gindex] = val; }
@@ -232,7 +308,6 @@ namespace tmc {
         void operator() (const std::string& file,const std::string& objF,const std::string& offF);
 
 
-
     private:
         /// Input scalar data on uniform grid.
         UGrid      m_ugrid;
@@ -241,9 +316,9 @@ namespace tmc {
         int m_nx; //!< grid size in x-direction
         int m_ny; //!< grid size in y-direction
         int m_nz; //!< grid size in z-direction
-        float m_dx; //!< grid spacing in x-direction
-        float m_dy; //!< grid spacing in y-direction
-        float m_dz; //!< grid spacing in z-direction
+        double m_dx; //!< grid spacing in x-direction
+		double m_dy; //!< grid spacing in y-direction
+		double m_dz; //!< grid spacing in z-direction
         std::array<float,6> m_bbox; //!< the bounding box of the ugrid.
 
 
@@ -257,28 +332,30 @@ namespace tmc {
         }
 
     private:
+		///The structure _Vertex_ represents a vertex by giving its unique global index and the unique index of the edge.
+		struct Vertex {
+			int g_idx{ -1 }; //<! Index indicating the position in vertex array, used final shared vertex list.
+			int g_edg{ -1 }; //<! Unique global index used a key to find unique vertex list in the map.
+		};
+		/// A _Triangle_ consisting of three indices for the three vertices.
+		struct Triangle {
+			int v[3];
+			int id{ -1 };
+			Triangle() {
+				v[0] = -1;
+				v[1] = -1;
+				v[2] = -1;
+			}
+		};
+	
         /// Implements the topologically correct and manifold marching cubes algorithm for the ugrid.
         void t_mc(const double i0);
         /// Compute intersection of level set with ambiguous cell. A standard version.
         void t_slice(const int i,const int j,const int k,const double i0,double* u,Point* p,Normal* n,const int i_case);
         /// Compute intersection of level set with ambiguous cell. Lookup geometry using bit patterns.
         void p_slice(const int i,const int j,const int k,const double i0,double* u,Point* p,Normal* n,const int i_case);
-
-        ///The structure _TVertex_ represents a vertex by giving its unique index and the unique index of the edge.
-        struct Vertex {
-            int g_idx{-1};
-            int g_edg{-1};
-        };
-        /// A marching cube's _Triangle_ consists of three vertices.
-        struct Triangle {
-            int v[3];
-            int id{-1};
-            Triangle() {
-                v[0] = -1;
-                v[1] = -1;
-                v[2] = -1;
-            }
-        };
+		/// Implements the standard Marching Cubes algorithm with lookup tables changed to match element numbering.
+		void s_mc(const double i0, UGrid& ugrid, std::vector<Point>& points, std::vector<Normal>& normals, std::vector<Triangle>& triangles);
 
         /// Store unique vertex index and corresponding unique edge index.
         std::map<int,int>     m_vertices;

@@ -13,13 +13,19 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
 {
     std::cout << " ... reading data \n";
 
-    std::FILE* f = std::fopen(i_file.c_str(), "r");
+	/*std::FILE* f{ nullptr };
+	errno_t status = fopen_s(&f, i_file.c_str(), "rb"); 
+	if (status != 0) {
+		std::cerr << "ERROR: can't open file " << i_file.c_str() << std::endl;
+		exit(1);
+	}*/
+	std::FILE* f = fopen(i_file.c_str(), "rb");
     short x_size;
     short y_size;
     short z_size;
-    std::fread(&x_size, sizeof(short), 1, f);
-    std::fread(&y_size, sizeof(short), 1, f);
-    std::fread(&z_size, sizeof(short), 1, f);
+    std::fread(&x_size, sizeof(ushort), 1, f);
+    std::fread(&y_size, sizeof(ushort), 1, f);
+    std::fread(&z_size, sizeof(ushort), 1, f);
     float dx;
     float dy;
     float dz;
@@ -36,21 +42,21 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
     double ymax = m_dy * (m_ny - 1.);
     double zmax = m_dz * (m_nz - 1.);
     std::array<Point, 8> bb;
-    bb[0] = Point{0,0,0};
-    bb[1] = Point{xmax,0,0};
-    bb[2] = Point{0,ymax,0};
-    bb[3] = Point{xmax,ymax,0};
-    bb[4] = Point{0,0,zmax};
-    bb[5] = Point{xmax,0,zmax};
-    bb[6] = Point{0,ymax,zmax};
-    bb[7] = Point{xmax,ymax,zmax};
+	bb[0] = Point{ { 0, 0, 0 } };
+	bb[1] = Point{ { xmax, 0, 0 } };
+	bb[2] = Point{ { 0, ymax, 0 } };
+	bb[3] = Point{ { xmax, ymax, 0 } };
+	bb[4] = Point{ { 0, 0, zmax } };
+	bb[5] = Point{ { xmax, 0, zmax } };
+	bb[6] = Point{ { 0, ymax, zmax } };
+	bb[7] = Point{ { xmax, ymax, zmax } };
 
     m_ugrid.init(m_nx, m_ny, m_nz,bb);
     int m_size = m_nx * m_ny * m_nz;
     unsigned short* t_buff = new unsigned short[x_size*y_size*z_size];
     std::fread(&t_buff[0],sizeof(unsigned short),x_size*y_size*z_size,f);
     for (int i = 0; i < m_size; i++) {
-        m_ugrid.scalar(i,double(t_buff[i]));
+        m_ugrid.scalar(i,(double)t_buff[i]);
     }
     std::fclose(f);
     delete [] t_buff;
@@ -67,7 +73,8 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
 
     // compute isosurface
     std::cout << " ... computing isosurface\n";
-    t_mc(1000);
+	const double i0 = 700.01;
+    t_mc(i0);
 
 
     const int nr_v = (int)m_points.size();
@@ -113,27 +120,6 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
     offF.close();
 }
 
-
-//*******************************************************************************************************************************************
-//  IMPLEMENTATION
-//*******************************************************************************************************************************************
-//void
-//tmc::MarchingCubes::create_test()
-//{
-//    const int nx = m_ugrid.x_size();
-//    const int ny = m_ugrid.y_size();
-//    const int nz = m_ugrid.z_size();
-//    Point center{0.5,0.5,0.5};
-//    for (int k = 0; k < nz; k++) {
-//        for (int j = 0; j < ny; j++) {
-//            for (int i = 0; i < nx; i++) {
-//                Point p = m_ugrid.point(i,j,k);
-//                double r2 = std::sqrt(dot(p-center,p-center));
-//                m_ugrid.scalar(i,j,k,r2);
-//            }
-//        }
-//    }
-//}
 
 
 //*******************************************************************************************************************************************
@@ -214,8 +200,8 @@ tmc::MarchingCubes::t_mc(const double i0)
                 int tcm = (int)t_ambig[i_case];
                 if (tcm == 105) {
                     i_case_count++;
-                    t_slice(i,j,k,i0,u,p,n,i_case);
-                    //p_slice(i,j,k,i0,u,p,n,i_case);
+                    //t_slice(i,j,k,i0,u,p,n,i_case);
+                    p_slice(i,j,k,i0,u,p,n,i_case);
                 } else {
                     // compute for this case the vertices
                     ushort flag = 1;
@@ -316,9 +302,9 @@ void
 tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,double* F, Point* p,Normal* n,const int i_case)
 {
     const int face_e[6][4] = {{0,1,2,3},{4,5,6,7},{0,9,4,8},{2,10,6,11},{3,11,7,8},{1,10,5,9}};
-    unsigned short face_e_[6] = {12816, 30292, 33936, 46754, 34739, 38305};
+    //unsigned short face_e_[6] = {12816, 30292, 33936, 46754, 34739, 38305};
     const int face_v[6][4] = {{0,1,2,3},{4,5,6,7},{0,1,4,5},{2,3,6,7},{0,2,4,6},{1,3,5,7}};
-    unsigned short face_v_[6] = {12816, 30292, 21520, 30258, 25632, 30001};
+    //unsigned short face_v_[6] = {12816, 30292, 21520, 30258, 25632, 30001};
 
     // there are 12 edges, assign to each vertex three edges, the global edge numbering
     // consist of 3*global_vertex_id + edge_offset.
@@ -533,11 +519,11 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 
     // compute size of contours
     int csz[4] = {0,0,0,0};
-    for (int i = 0; i < cnt; i++) {
+    for (int ii = 0; ii < cnt; ii++) {
         int pos = 0;
-        while (contours[i][pos] != -1)
+        while (contours[ii][pos] != -1)
             pos++;
-        csz[i] = pos-1;
+        csz[ii] = pos-1;
     }
 
     // triangulate contours
@@ -868,8 +854,8 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 
             }
             // compute vertex: trilinear interpolate
-            Point cv{0,0,0};
-            Normal cn{0,0,0};
+			Point cv;
+			Normal cn;
             cv[0] = (1-w)*((1-v)*((1-u)*p[0][0]+u*p[1][0]) + v*((1-u)*p[2][0]+u*p[3][0]))
                   + w*((1-v)*((1-u)*p[4][0]+u*p[5][0]) + v*((1-u)*p[6][0]+u*p[7][0]));
             cv[1] = (1-w)*((1-v)*((1-u)*p[0][1]+u*p[1][1]) + v*((1-u)*p[2][1]+u*p[3][1]))
@@ -948,829 +934,856 @@ tmc::MarchingCubes::t_slice(const int i,const int j,const int k,const double i0,
 //*******************************************************************************************************************************************
 //  IMPLEMENTATION p_slice
 //*******************************************************************************************************************************************
-//void
-//tmc::MarchingCubes::p_slice(const int i,const int j,const int k,const double i0,double* F,Point* p,Normal* n,const int i_case)
-//{
-//    unsigned short face_e_[6] = {12816, 30292, 33936, 46754, 34739, 38305};
-//    unsigned short face_v_[6] = {12816, 30292, 21520, 30258, 25632, 30001};
-//
-//    // reading edge from face
-//    auto get_face_e = [face_e_](const int f,const int e) { return ((face_e_[f]>>(4*e))&0xF); };
-//    auto get_face_v = [face_v_](const int f,const int e) { return ((face_v_[f]>>(4*e))&0xF); };
-//
-//    // there are 12 edges, assign to each vertex three edges, the global edge numbering
-//    // consist of 3*global_vertex_id + edge_offset.
-//    const unsigned long long gei_pattern_ = 670526590282893600ull;
-//    const uint axis_mask = 1;
-//    const uint offs_mask = 3;
-//    //    const int global_edge_id[][4] = {{0,0,0,0},{1,0,0,1},{0,1,0,0},{0,0,0,1},
-//    //        {0,0,1,0},{1,0,1,1},{0,1,1,0},{0,0,1,1},
-//    //        {0,0,0,2},{1,0,0,2},{1,1,0,2},{0,1,0,2}};
-//    // the end vertices of an edge
-//    //    int l_edges[12][2] = {{0,1}, {1,3}, {2,3}, {0,2},
-//    //        {4,5}, {5,7}, {6,7}, {4,6},
-//    //        {0,4}, {1,5}, {3,7}, {2,6}};
-//    const unsigned char l_edges_[12] = {16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98};
-//    // the two faces sharing an edge
-//    struct vertex {
-//        uint g_edg; // global edge id
-//        uint g_idx; // final index in vertex list
-//    };
-//    // there might be up to 15 vertices and normals including three vertices or normals at the interior
-//    std::vector<vertex> vertices(12);
-//    std::vector<Point>  ip(12);
-//    std::vector<Normal> in(12);
-//    std::vector<double> ecoord{0,0,0,0,0,0,0,0,0,0,0,0}; // there are 12 coordinates along the edges, these are the intersections
-//
-//
-//    // edge intersection pattern
-//    const ushort e_pattern_ = edge_pattern[i_case];
-//
-//
-//    // collect vertices
-//    ushort   flag{1};
-//    for (int eg = 0; eg < 12; eg++) {
-//        vertices[eg].g_edg = -1;
-//        vertices[eg].g_idx = -1;
-//        if (flag & e_pattern[i_case]) {
-//            // the edge global index is given by the vertex global index + the edge offset
-//            uint shift = 5*eg;
-//            const int ix = i + (int)((gei_pattern_>>shift)&1); // global_edge_id[eg][0];
-//            const int iy = j + (int)((gei_pattern_>>(shift+1))&1); // global_edge_id[eg][1];
-//            const int iz = k + (int)((gei_pattern_>>(shift+2))&1); // global_edge_id[eg][2];
-//            const int off_val = (int)((gei_pattern_>>(shift+3))&3);
-//
-//            vertices[eg].g_edg = int(m_cell_shift_factor*m_ugrid.global_index(ix, iy, iz) + off_val);
-//
-//            // generate vertex here, do not care at this point if vertex already exist
-//            //int* vert = l_edges[eg];
-//            // interpolation weight
-//            uint v0 = (l_edges_[eg]&0xF);
-//            uint v1 = (l_edges_[eg]>>4)&0xF;
-//            //            int v0 = vert[0];
-//            //            int v1 = vert[1];
-//            double l = (i0 - F[v0]) / (F[v1] - F[v0]);
-//            ecoord[eg] = l;
-//            // interpolate vertex
-//            ip[eg] = (1 - l)*p[v0] + l*p[v1];
-//            // interpolate normal
-//            in[eg] = (1 - l)*n[v0] + l*n[v1];
-//            in[eg] /= std::sqrt(dot(in[eg], in[eg]));
-//            // set vertex index
-//            int g_idx = set_tvertex(vertices[eg].g_edg);
-//            if (g_idx == -1) {
-//                TVertex tvertex;
-//                tvertex.p = ip[eg];
-//                tvertex.n = in[eg];
-//                g_idx = (int)m_tvertices.size();
-//                tvertex.g_idx = g_idx;
-//                tvertex.g_edg = vertices[eg].g_edg;
-//                m_tvertices.push_back(tvertex);
-//                EdgeVertex ev{tvertex.g_edg,tvertex.g_idx};
-//                m_ehash[hashbucket_index(m_nbuckets, tvertex.g_edg)].push_back(ev);
-//            }
-//            vertices[eg].g_idx = g_idx;
-//        }
-//        flag <<=1;
-//    }
-//
-//    // build up segments
-//    unsigned char segm_[12]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-//    auto set_segm = [] (const int& e, const int& val,unsigned char segm_[12]) {
-//        if ((segm_[e]&0xF) == 0xF)
-//            segm_[e] = (unsigned char)val&0xF;
-//        else
-//            segm_[e] |= val<<4;
-//    };
-//    auto get_segm = [] (const int& e, const int pos,unsigned char segm_[12]) {
-//        if (pos == 1)
-//            return (int)((segm_[e]>>4)&0xF);
-//        else
-//            return (int)(segm_[e]&0xF);
-//    };
-//
-//    for (int f = 0; f < 6; f++) {
-//        int pos = 0;
-//        int p_ = 0;
-//        int s[4] = {0,0,0,0};
-//        unsigned short s_ = 0xFFFF;
-//        auto set_e = [] (const int e, unsigned short& s_) {
-//            if ((s_&0xF) == 0xF)
-//                s_ &= 0xFFF0^(e);
-//            else if (((s_>>4)&0xF) == 0xF)
-//                s_ &= 0xFF0F^(e<<4);
-//            else if (((s_>>8)&0xF) == 0xF)
-//                s_ &= 0xF0FF^(e<<8);
-//            else
-//                s_ &= 0x0FFF^(e<<12);
-//        };
-//        auto get_e = [] (const int p,unsigned short s_) { return (int)((s_>>(4*p))&0xF); };
-//
-//        for (int eg = 0; eg < 4; eg++) {
-//            ushort eid_ = get_face_e(f,eg);
-//            if ((e_pattern_>>eid_)&1) {
-//                p_ += 1;
-//                set_e(eid_,s_);
-//            }
-//        }
-//
-//        // test new revolutionary method
-//        if (p_ == 2) {
-//            set_segm(get_e(0,s_),get_e(1,s_),segm_);
-//            set_segm(get_e(1,s_),get_e(0,s_),segm_);
-//        } else if (p_ == 4){
-//            const double f0 = F[get_face_v(f,0)];
-//            const double f1 = F[get_face_v(f,1)];
-//            const double f2 = F[get_face_v(f,2)];
-//            const double f3 = F[get_face_v(f,3)];
-//            const double eta = f0+f3-f1-f2;
-//            const double u0 = (f0-f2)/eta;
-//            if (ecoord[get_face_e(f,0)] < u0) {
-//                set_segm(get_face_e(f,0),get_face_e(f,3),segm_);
-//                set_segm(get_face_e(f,3),get_face_e(f,0),segm_);
-//                set_segm(get_face_e(f,1),get_face_e(f,2),segm_);
-//                set_segm(get_face_e(f,2),get_face_e(f,1),segm_);
-//            } else {
-//                set_segm(get_face_e(f,0),get_face_e(f,1),segm_);
-//                set_segm(get_face_e(f,1),get_face_e(f,0),segm_);
-//                set_segm(get_face_e(f,2),get_face_e(f,3),segm_);
-//                set_segm(get_face_e(f,3),get_face_e(f,2),segm_);
-//            }
-//        }
-//    } //
-//
-//    unsigned long long c_ = 0xFFFFFFFFFFFFFFFF;
-//    auto set_c = [] (const int e,const int val,unsigned long long &c_) {
-//        c_ &= ~(0xFull<<(e*4));
-//        c_ |= (((unsigned long long)val)<<(e*4));
-//    };
-//    auto get_c = [] (const int e, unsigned long long c_) {
-//        return (int)((c_>>(4*e))&0xF);
-//    };
-//    unsigned char c_sz[4]={0,0,0,0};
-//    int cnt_ = 0; // cnt is number of contours
-//    int pos_ = 0;
-//    for (int e = 0; e < 12; e++) {
-//        if (segm_[e] == 0xFF) {
-//            continue;
-//        }
-//
-//        // contour found
-//        unsigned char le = get_segm(e,0,segm_);
-//        unsigned char ce = e;
-//        unsigned char ne = get_segm(e,1,segm_);
-//
-//        set_c(pos_+c_sz[cnt_],le,c_);
-//        set_c(pos_+c_sz[cnt_]+1,ce,c_);
-//        set_c(pos_+c_sz[cnt_]+2,ne,c_);
-//        c_sz[cnt_] += 3;
-//        segm_[e] = 0xFF;
-//        while (true) {
-//            int s1_ = get_segm(ne,0,segm_);
-//            int s2_ = get_segm(ne,1,segm_);
-//            segm_[ne] = 0xFF;
-//            if (s1_ == ce) {
-//                if (s2_ == le) {
-//                    segm_[le] = 0xFF;
-//                    pos_ += c_sz[cnt_];
-//                    cnt_ += 1;
-//                    break;
-//                }
-//                set_c(pos_+c_sz[cnt_],s2_,c_);
-//                ce = ne;
-//                ne = s2_;
-//                c_sz[cnt_] += 1;
-//            } else if (s2_ == ce) {
-//                if (s1_ == le) {
-//                    segm_[le] = 0xFF;
-//                    pos_ += c_sz[cnt_];
-//                    cnt_ += 1;
-//                    break;
-//                }
-//                set_c(pos_+c_sz[cnt_],s1_,c_);
-//                ce = ne;
-//                ne = s1_;
-//                c_sz[cnt_] += 1;
-//            }
-//        }
-//
-//    }
-//
-//    // compute intersection of opposite faces
-//    double ui[3][2];
-//    double vi[3][2];
-//    int    ic[3];
-//    for (int f = 0; f < 6; f += 2) {
-//        ic[f/2] = 0;
-//        double f1 = F[get_face_v(f,0)];
-//        double f2 = F[get_face_v(f,1)];
-//        double f3 = F[get_face_v(f,2)];
-//        double f4 = F[get_face_v(f,3)];
-//        double h1 = F[get_face_v(f+1,0)];
-//        double h2 = F[get_face_v(f+1,1)];
-//        double h3 = F[get_face_v(f+1,2)];
-//        double h4 = F[get_face_v(f+1,3)];
-//        const double a = (f1-f2)*(-h3+h4+h1-h2)-(h1-h2)*(-f3+f4+f1-f2);
-//        const double b = (i0-f1)*(-h3+h4+h1-h2)+(f1-f2)*(h3-h1)-(i0-h1)*(-f3+f4+f1-f2)-(h1-h2)*(f3-f1);
-//        const double c = (i0-f1)*(h3-h1)-(i0-h1)*(f3-f1);
-//        double d = b*b - 4*a*c;
-//        ui[f/2][0] = 0;
-//        ui[f/2][1] = 0;
-//        vi[f/2][0] = 0;
-//        vi[f/2][1] = 0;
-//        if (d > 0) {
-//            d = std::sqrt(d);
-//            double u1 = (-b-d) / (2*a);
-//            double u2 = (-b+d) / (2*a);
-//            if (u1 > u2) {
-//                double t = u1;
-//                u1 = u2;
-//                u2 = t;
-//            }
-//            double g1 = f1*(1-u1) + f2*u1;
-//            double g2 = f3*(1-u1) + f4*u1;
-//            double v1 = (i0 - g1)/(g2-g1);
-//            g1 = f1*(1-u2) + f2*u2;
-//            g2 = f3*(1-u2) + f4*u2;
-//            double v2 = (i0 - g1)/(g2-g1);
-//            if ((0 < u1 && u1 < 1) && (0 < v1 && v1 < 1)) {
-//                ui[f/2][ic[f/2]] = u1;
-//                vi[f/2][ic[f/2]] = v1;
-//                ic[f/2] += 1;
-//            }
-//            if ((0 < u2 && u2 < 1) && (0 < v2 && v2 < 1)) {
-//                ui[f/2][ic[f/2]] = u2;
-//                vi[f/2][ic[f/2]] = v2;
-//                ic[f/2] += 1;
-//            }
-//        }
-//    }
-//
-//
-//    // triangulate contours
-//    // cnt is the number of contours, the last vertex is equal the first indicating the closed
-//    // contour, then there is a -1
-//    int tc = ic[0] + ic[1] + ic[2];
-//
-//    // check if there is a tunnel or a contour with 12 vertices
-//    bool tun_[4] = {false,false,false,false};
-//    if (tc == 6) {
-//        m_ccases_tunnel += 1;
-//        // there is a tunnel, triangulate and mark used contours
-//        // if there is a tunnel, there are at most three contours
-//        // if there are only two contours, both build up the contour
-//        // if there are three contours, exclude the contour of length 3 which does not
-//        // belong to the tunnel
-//        // check which contour does not belong to the tunnel
-//        tun_[0] = true;
-//        if (cnt_ == 2) {
-//            tun_[1] = true;
-//        } else if (cnt_ == 3) {
-//            tun_[2] = true;
-//            double vc[12];
-//            vc[0]  = ecoord[0];
-//            vc[1]  = 1;
-//            vc[2]  = ecoord[2];
-//            vc[3]  = 0;
-//            vc[4]  = ecoord[4];
-//            vc[5]  = 1;
-//            vc[6]  = ecoord[6];
-//            vc[7]  = 0;
-//            vc[8]  = 0;
-//            vc[9]  = 1;
-//            vc[10] = 1;
-//            vc[11] = 0;
-//            pos_ = 0;
-//            for (int t = 0; t < cnt_; t++) {
-//                if (c_sz[t] == 3) {
-//                    // check if countour does not belong to tunnel
-//                    // only 3, unroll loop
-//                    double umin = 2;
-//                    double umax = -2;
-//                    uint e0 = get_c(pos_,c_);
-//                    uint e1 = get_c(pos_+1,c_);
-//                    uint e2 = get_c(pos_+2,c_);
-//                    umin = (vc[e0] < umin) ? vc[e0] : umin;
-//                    umin = (vc[e1] < umin) ? vc[e1] : umin;
-//                    umin = (vc[e2] < umin) ? vc[e2] : umin;
-//                    umax = (vc[e0] > umax) ? vc[e0] : umax;
-//                    umax = (vc[e1] > umax) ? vc[e1] : umax;
-//                    umax = (vc[e2] > umax) ? vc[e2] : umax;
-//                    if (ui[0][0] > umax || ui[0][1] < umin) {
-//                        // outside the range, exclude
-//                        tun_[t] = false;
-//                        break;
-//                    }
-//                }
-//                pos_ += c_sz[t];
-//            }
-//        }
-//        // compute space hexagone
-//        // create 6 vertices
-//        double cvt[6][3];
-//        // face 1,2 and face 3,4 common coordinate is u
-//        double u = ui[0][0];
-//        double v = vi[0][0];
-//        double w = vi[1][0];
-//        uint p1 = 0;
-//        uint p2 = 0;
-//        uint p3 = 0;
-//        cvt[0][0] = u; cvt[0][1] = v; cvt[0][2] = w;
-//        // face 3,4 and face 5,6 common coord is w
-//        p3 = (std::fabs(w - vi[2][1]) < 0.00005) ? 1 : 0;
-//
-//        // connect alternating in p1, p2 and p3
-//        // get new v coordinate from face 4,5
-//        v = ui[2][p3];
-//        cvt[1][0] = u; cvt[1][1] = v; cvt[1][2] = w;
-//        // get new u coordinate from face 0,1
-//        p1 = (p1+1)%2;
-//        u = ui[0][p1];
-//        cvt[2][0] = u; cvt[2][1] = v; cvt[2][2] = w; //cvt(3,:) = [u,v,w];
-//        // get new w coordinate from face 2,3
-//        p2 = (p2+1)%2;
-//        w = vi[1][p2];
-//        cvt[3][0] = u; cvt[3][1] = v; cvt[3][2] = w; //cvt(4,:) = [u,v,w];
-//        // get new v coordinate from face 4,5
-//        p3 = (p3+1)%2;
-//        v = ui[2][p3];
-//        cvt[4][0] = u; cvt[4][1] = v; cvt[4][2] = w; //cvt(5,:) = [u,v,w];
-//        // get nuew u coordinate from face 0,1
-//        p1 = (p1+1)%2;
-//        u = ui[0][p1];
-//        cvt[5][0] = u; cvt[5][1] = v; cvt[5][2] = w; //cvt(6,:) = [u,v,w];
-//
-//        // compute triangulation
-//        // needs the space hexagon
-//        Point hex_p[6];
-//        for (int t = 0; t < 6; t++) {
-//            u = cvt[t][0]; v = cvt[t][1]; w = cvt[t][2];
-//            hex_p[t] = (1-w)*(1-v)*(1-u)*p[0] + (1-w)*(1-v)*u*p[1] + (1-w)*v*(1-u)*p[2] + (1-w)*v*u*p[3] + w*(1-v)*(1-u)*p[4] + w*(1-v)*u*p[5] + w*v*(1-u)*p[6] + w*v*u*p[7];
-//        }
-//        // compute the three vertices of the triangulation and assign a global number
-//        Point  tv[3];
-//        Normal tn[3];
-//        int tg_edg[3];
-//        int tg_idx[3];
-//        for (int t = 0; t < 3; t++) {
-//            // compute vertices
-//            tv[t] = 0.5*(hex_p[2*t]+hex_p[2*t+1]);
-//            // compute normals
-//            u = (cvt[2*t][0]+cvt[2*t+1][0])/2; v = (cvt[2*t][1]+cvt[2*t+1][1])/2; w = (cvt[2*t][2]+cvt[2*t+1][2])/2;
-//            tn[t] = (1-w)*(1-v)*(1-u)*n[0] + (1-w)*(1-v)*u*n[1] + (1-w)*v*(1-u)*n[2] + (1-w)*v*u*n[3] + w*(1-v)*(1-u)*n[4] + w*(1-v)*u*n[5] + w*v*(1-u)*n[6] + w*v*u*n[7];
-//
-//            tg_edg[t] = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + (3+t)); // this is the first interior vertex
-//            tg_idx[t] = set_tvertex(tg_edg[t]);
-//            if (tg_idx[t] == -1) {
-//                TVertex tvertex;
-//                tvertex.p = tv[t];
-//                tvertex.n = tn[t];
-//                tg_idx[t] = (int)m_tvertices.size();
-//                tvertex.g_idx = tg_idx[t];
-//                tvertex.g_edg = tg_edg[t];
-//                m_tvertices.push_back(tvertex);
-//                EdgeVertex ev{tg_edg[t],tg_idx[t]};
-//                m_ehash[hashbucket_index(m_nbuckets, tg_edg[t])].push_back(ev);
-//            }
-//        }
-//
-//        // triangulate:
-//        unsigned char tcon_[12];
-//        pos_ = 0;
-//        for (int t = 0; t < cnt_; t++) {
-//            if (tun_[t] != false) { // contour belongs to tunnel
-//                for (int r = 0; r < c_sz[t]; r++) {
-//                    uint index = -1;
-//                    double dist = 4;
-//                    uint ci = get_c(pos_+r,c_);
-//                    for (int s = 0; s < 6; s++) {
-//                        double uval = ip[ci][0] - hex_p[s][0];
-//                        double vval = ip[ci][1] - hex_p[s][1];
-//                        double wval = ip[ci][2] - hex_p[s][2];
-//                        double val = uval*uval + vval*vval + wval*wval;
-//                        if (dist > val) {
-//                            index = s;
-//                            dist = val;
-//                        }
-//                    }
-//                    tcon_[ci] = (unsigned char)index;
-//                }
-//            }
-//            pos_ += c_sz[t];
-//        }
-//
-//        // triangulate
-//        pos_ = 0;
-//        for (int t = 0; t < cnt_; t++) {
-//            if (tun_[t]) {
-//                for (int r = 0; r < c_sz[t]; r++) {
-//                    // collect indices
-//                    uint tid1 = get_c(pos_+r,c_);
-//                    uint tid2 = get_c(pos_+((r+1)%c_sz[t]),c_);
-//                    uint cid1 = tcon_[tid1];
-//                    uint cid2 = tcon_[tid2];
-//
-//                    if (cid1 == cid2 ) {
-//                        Triangle tr;
-//                        tr.v[0] = vertices[tid1].g_idx;
-//                        tr.v[1] = vertices[tid2].g_idx;
-//                        tr.v[2] = tg_idx[cid1/2];
-//                        //                        if (tr.v[1] > 1575043)
-//                        //                            std::cout << "ERROR: wrong vertex index\n";
-//                        m_ttriangles.push_back(tr);
-//                    } else {
-//                        // measure distance and compute
-//                        // better triangulation: user shorter diag to divide
-//                        double uval = ip[tid1][0] - tv[cid2/2][0];
-//                        double vval = ip[tid1][1] - tv[cid2/2][1];
-//                        double wval = ip[tid1][2] - tv[cid2/2][2];
-//                        double val1 = uval*uval + vval*vval + wval*wval;
-//                        // second diag
-//                        uval = ip[tid2][0] - tv[cid1/2][0];
-//                        vval = ip[tid2][1] - tv[cid1/2][1];
-//                        wval = ip[tid2][2] - tv[cid1/2][2];
-//                        double val2 = uval*uval + vval*vval + wval*wval;
-//                        if (val1 < val2) {
-//                            Triangle tr;
-//                            tr.v[0] = vertices[tid1].g_idx;
-//                            tr.v[1] = tg_idx[cid2/2];
-//                            tr.v[2] = tg_idx[cid1/2];
-//                            //                            if (tr.v[1] > 1575043)
-//                            //                                std::cout << "ERROR: wrong vertex index\n";
-//                            m_ttriangles.push_back(tr);
-//                            tr.v[0] = vertices[tid1].g_idx;
-//                            tr.v[1] = vertices[tid2].g_idx;
-//                            tr.v[2] = tg_idx[cid2/2];
-//                            //                            if (tr.v[1] > 1575043)
-//                            //                                std::cout << "ERROR: wrong vertex index\n";
-//                            m_ttriangles.push_back(tr);
-//                        } else {
-//                            Triangle tr;
-//                            tr.v[0] = vertices[tid1].g_idx;
-//                            tr.v[1] = vertices[tid2].g_idx;
-//                            tr.v[2] = tg_idx[cid1/2];
-//                            //                            if (tr.v[1] > 1575043)
-//                            //                                std::cout << "ERROR: wrong vertex index\n";
-//                            m_ttriangles.push_back(tr);
-//                            tr.v[0] = vertices[tid2].g_idx;
-//                            tr.v[1] = tg_idx[cid2/2];
-//                            tr.v[2] = tg_idx[cid1/2];
-//                            //                            if (tr.v[1] > 1575043)
-//                            //                                std::cout << "ERROR: wrong vertex index\n";
-//                            m_ttriangles.push_back(tr);
-//                        }
-//                    }
-//                }
-//            }
-//            pos_ += c_sz[t];
-//        }
-//        // if there is a unique contour, then add triangle at the midpoint
-//        if (cnt_ == 1) {
-//            m_ccases_tunnel -= 1;
-//            m_ccases_12cont += 1;
-//            //std::cout << "12 contour at " << m_iindex << ", " << m_jindex << ", " << m_kindex << std::endl;
-//            Triangle tr;
-//            tr.v[0] = tg_idx[0];
-//            tr.v[1] = tg_idx[1];
-//            tr.v[2] = tg_idx[2];
-//            //            if (tr.v[1] > 1575043)
-//            //                std::cout << "ERROR: wrong vertex index\n";
-//            m_ttriangles.push_back(tr);
-//        }
-//    }
-//    pos_ = 0;
-//    for (int t = 0; t < cnt_; t++) {
-//        if (tun_[t]==false) {
-//            // triangulation
-//            uint csz = (uint) c_sz[t];
-//            switch (csz) {
-//                case 3:
-//                {
-//                    m_ccases_3 += 1;
-//                    Triangle tri;
-//                    tri.v[0] = vertices[get_c(pos_,c_)].g_idx; tri.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri.v[2] = vertices[get_c(pos_+2,c_)].g_idx;
-//                    m_ttriangles.push_back(tri);
-//                }
-//                    break;
-//                case 4:
-//                {
-//                    m_ccases_4 += 1;
-//                    Triangle tri41;
-//                    Triangle tri42;
-//                    double d1 = distance(ip[get_c(pos_,c_)], ip[get_c(pos_+2,c_)]);
-//                    double d2 = distance(ip[get_c(pos_+1,c_)], ip[get_c(pos_+3,c_)]);
-//                    if (d1 < d2) {
-//                        tri41.v[0] = vertices[get_c(pos_,c_)].g_idx;
-//                        tri41.v[1] = vertices[get_c(pos_+1,c_)].g_idx;
-//                        tri41.v[2] = vertices[get_c(pos_+2,c_)].g_idx;
-//                        tri42.v[0] = vertices[get_c(pos_,c_)].g_idx;
-//                        tri42.v[1] = vertices[get_c(pos_+2,c_)].g_idx;
-//                        tri42.v[2] = vertices[get_c(pos_+3,c_)].g_idx;
-//                    } else {
-//                        tri41.v[0] = vertices[get_c(pos_,c_)].g_idx;
-//                        tri41.v[1] = vertices[get_c(pos_+1,c_)].g_idx;
-//                        tri41.v[2] = vertices[get_c(pos_+3,c_)].g_idx;
-//                        tri42.v[0] = vertices[get_c(pos_+1,c_)].g_idx;
-//                        tri42.v[1] = vertices[get_c(pos_+2,c_)].g_idx;
-//                        tri42.v[2] = vertices[get_c(pos_+3,c_)].g_idx;
-//                    }
-//                    m_ttriangles.push_back(tri41);
-//                    m_ttriangles.push_back(tri42);
-//                }
-//                    break;
-//                case 5:
-//                {
-//                    m_ccases_5 += 1;
-//                    Triangle tri51;
-//                    Triangle tri52;
-//                    Triangle tri53;
-//                    tri51.v[0] = vertices[get_c(pos_,c_)].g_idx; tri51.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri51.v[2] = vertices[get_c(pos_+2,c_)].g_idx;
-//                    tri52.v[0] = vertices[get_c(pos_,c_)].g_idx; tri52.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri52.v[2] = vertices[get_c(pos_+3,c_)].g_idx;
-//                    tri53.v[0] = vertices[get_c(pos_,c_)].g_idx; tri53.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri53.v[2] = vertices[get_c(pos_+4,c_)].g_idx;
-//                    m_ttriangles.push_back(tri51);
-//                    m_ttriangles.push_back(tri52);
-//                    m_ttriangles.push_back(tri53);
-//                }
-//                    break;
-//                case 6:
-//                {
-//                    // check if there are asymptotes
-//                    if (tc == 2 && ic[0] != 2 && ic[1] != 2 && ic[2] != 2) {
-//                        m_ccases_6a += 1;
-//                        Point  cv;
-//                        Normal cn;
-//                        double u{0},v{0},w{0};
-//                        if (ic[0] == 0) {
-//                            // face 0,1 has not asymptotes, common coordinate is w
-//                            u = ui[1][0];
-//                            v = ui[2][0];
-//                            w = vi[1][0];
-//                        } else if (ic[1] == 0) {
-//                            // face 2,3 have no asymptotes, common coordinate is v
-//                            u = ui[0][0];
-//                            v = vi[0][0];
-//                            w = vi[2][0];
-//                        } else {
-//                            // face 4,5 have no asymptotes, common coordinate is u
-//                            u = ui[0][0];
-//                            v = vi[0][0];
-//                            w = vi[1][0];
-//                        }
-//                        // compute vertex: trilinear interpolate
-//                        cv = (1-w)*((1-v)*((1-u)*p[0]+u*p[1]) + v*((1-u)*p[2]+u*p[3])) + w*((1-v)*((1-u)*p[4]+u*p[5]) + v*((1-u)*p[6]+u*p[7]));
-//                        cn = (1-w)*((1-v)*((1-u)*n[0]+u*n[1]) + v*((1-u)*n[2]+u*n[3])) + w*((1-v)*((1-u)*n[4]+u*n[5]) + v*((1-u)*n[6]+u*n[7]));
-//                        // store vertex in list
-//                        // compute unique vertex id
-//                        int g_edg = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + 3); // this is the first interior vertex
-//                        int g_idx = set_tvertex(g_edg);
-//                        if (g_idx == -1) {
-//                            TVertex tvertex;
-//                            tvertex.p = cv;
-//                            tvertex.n = cn;
-//                            g_idx = (int)m_tvertices.size();
-//                            tvertex.g_idx = g_idx;
-//                            tvertex.g_edg = g_edg;
-//                            m_tvertices.push_back(tvertex);
-//                            EdgeVertex ev{g_edg,g_idx};
-//                            m_ehash[hashbucket_index(m_nbuckets, g_edg)].push_back(ev);
-//                        }
-//                        // triangulate
-//                        Triangle tri61;
-//                        Triangle tri62;
-//                        Triangle tri63;
-//                        Triangle tri64;
-//                        Triangle tri65;
-//                        Triangle tri66;
-//                        tri61.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri61.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri61.v[2] = g_idx;
-//                        tri62.v[0] = vertices[get_c(pos_+1,c_)].g_idx; tri62.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri62.v[2] = g_idx;
-//                        tri63.v[0] = vertices[get_c(pos_+2,c_)].g_idx; tri63.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri63.v[2] = g_idx;
-//                        tri64.v[0] = vertices[get_c(pos_+3,c_)].g_idx; tri64.v[1] = vertices[get_c(pos_+4,c_)].g_idx; tri64.v[2] = g_idx;
-//                        tri65.v[0] = vertices[get_c(pos_+4,c_)].g_idx; tri65.v[1] = vertices[get_c(pos_+5,c_)].g_idx; tri65.v[2] = g_idx;
-//                        tri66.v[0] = vertices[get_c(pos_+5,c_)].g_idx; tri66.v[1] = vertices[get_c(pos_,c_)].g_idx;   tri66.v[2] = g_idx;
-//                        m_ttriangles.push_back(tri61); m_ttriangles.push_back(tri62); m_ttriangles.push_back(tri63);
-//                        m_ttriangles.push_back(tri64); m_ttriangles.push_back(tri65); m_ttriangles.push_back(tri66);
-//                    } else {
-//                        m_ccases_6 += 1;
-//                        Triangle tri61;
-//                        Triangle tri62;
-//                        Triangle tri63;
-//                        Triangle tri64;
-//                        tri61.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri61.v[1] = vertices[get_c(pos_+4,c_)].g_idx; tri61.v[2] = vertices[get_c(pos_+5,c_)].g_idx;
-//                        tri62.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri62.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri62.v[2] = vertices[get_c(pos_+4,c_)].g_idx;
-//                        tri63.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri63.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri63.v[2] = vertices[get_c(pos_+2,c_)].g_idx;
-//                        tri64.v[0] = vertices[get_c(pos_+2,c_)].g_idx; tri64.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri64.v[2] = vertices[get_c(pos_+4,c_)].g_idx;
-//                        m_ttriangles.push_back(tri61);
-//                        m_ttriangles.push_back(tri62);
-//                        m_ttriangles.push_back(tri63);
-//                        m_ttriangles.push_back(tri64);
-//                    }
-//                }
-//                    break;
-//                case 7:
-//                {
-//                    m_ccases_7 += 1;
-//                    Point  cv;
-//                    Normal cn;
-//                    double u{0},v{0},w{0};
-//                    if (ic[0] == 0) {
-//                        // face 0,1 has not asymptotes, common coordinate is w
-//                        u = ui[1][0];
-//                        v = ui[2][0];
-//                        w = vi[1][0];
-//                    } else if (ic[1] == 0) {
-//                        // face 2,3 have no asymptotes, common coordinate is v
-//                        u = ui[0][0];
-//                        v = vi[0][0];
-//                        w = vi[2][0];
-//                    } else {
-//                        // face 4,5 have no asymptotes, common coordinate is u
-//                        u = ui[0][0];
-//                        v = vi[0][0];
-//                        w = vi[1][0];
-//                    }
-//                    // compute vertex: trilinear interpolate
-//                    cv = (1-w)*((1-v)*((1-u)*p[0]+u*p[1]) + v*((1-u)*p[2]+u*p[3])) + w*((1-v)*((1-u)*p[4]+u*p[5]) + v*((1-u)*p[6]+u*p[7]));
-//                    cn = (1-w)*((1-v)*((1-u)*n[0]+u*n[1]) + v*((1-u)*n[2]+u*n[3])) + w*((1-v)*((1-u)*n[4]+u*n[5]) + v*((1-u)*n[6]+u*n[7]));
-//                    // store vertex in list
-//                    // compute unique vertex id
-//                    int g_edg = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + 3); // this is the first interior vertex
-//                    int g_idx = set_tvertex(g_edg);
-//                    if (g_idx == -1) {
-//                        TVertex tvertex;
-//                        tvertex.p = cv;
-//                        tvertex.n = cn;
-//                        g_idx = (int)m_tvertices.size();
-//                        tvertex.g_idx = g_idx;
-//                        tvertex.g_edg = g_edg;
-//                        m_tvertices.push_back(tvertex);
-//                        EdgeVertex ev{g_edg,g_idx};
-//                        m_ehash[hashbucket_index(m_nbuckets, g_edg)].push_back(ev);
-//                    }
-//                    // triangulate
-//                    Triangle tri71;
-//                    Triangle tri72;
-//                    Triangle tri73;
-//                    Triangle tri74;
-//                    Triangle tri75;
-//                    Triangle tri76;
-//                    Triangle tri77;
-//                    tri71.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri71.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri71.v[2] = g_idx;
-//                    tri72.v[0] = vertices[get_c(pos_+1,c_)].g_idx; tri72.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri72.v[2] = g_idx;
-//                    tri73.v[0] = vertices[get_c(pos_+2,c_)].g_idx; tri73.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri73.v[2] = g_idx;
-//                    tri74.v[0] = vertices[get_c(pos_+3,c_)].g_idx; tri74.v[1] = vertices[get_c(pos_+4,c_)].g_idx; tri74.v[2] = g_idx;
-//                    tri75.v[0] = vertices[get_c(pos_+4,c_)].g_idx; tri75.v[1] = vertices[get_c(pos_+5,c_)].g_idx; tri75.v[2] = g_idx;
-//                    tri76.v[0] = vertices[get_c(pos_+5,c_)].g_idx; tri76.v[1] = vertices[get_c(pos_+6,c_)].g_idx; tri76.v[2] = g_idx;
-//                    tri77.v[0] = vertices[get_c(pos_+6,c_)].g_idx; tri77.v[1] = vertices[get_c(pos_,c_)].g_idx;   tri77.v[2] = g_idx;
-//                    m_ttriangles.push_back(tri71); m_ttriangles.push_back(tri72); m_ttriangles.push_back(tri73);
-//                    m_ttriangles.push_back(tri74); m_ttriangles.push_back(tri75); m_ttriangles.push_back(tri76);
-//                    m_ttriangles.push_back(tri77);
-//                }
-//                    break;
-//                case 8:
-//                {
-//                    m_ccases_8 += 1;
-//                    // collect u,v,w, there are one which has two values, take always mean
-//                    double u{0};
-//                    double v{0};
-//                    double w{0};
-//                    if (tc == 4) {
-//                        if (ic[0] == 2) {
-//                            // face 0,1 has not asymptotes, common coordinate is w
-//                            u = ui[1][0];
-//                            v = ui[2][0];
-//                            w = vi[1][0];
-//                        } else if (ic[1] == 2) {
-//                            // face 2,3 have no asymptotes, common coordinate is v
-//                            u = ui[0][0];
-//                            v = vi[0][0];
-//                            w = vi[2][0];
-//                        } else {
-//                            // face 4,5 have no asymptotes, common coordinate is u
-//                            u = ui[0][0];
-//                            v = vi[0][0];
-//                            w = vi[1][0];
-//                        }
-//                    } else {
-//                        u = (ui[0][0] + ui[1][0]) / 2.;
-//                        v = (vi[0][0] + ui[2][0]) / 2.;
-//                        w = (vi[1][0] + vi[2][0]) / 2.;
-//                    }
-//                    // compute vertex: trilinear interpolate
-//                    Point  cv = (1-w)*((1-v)*((1-u)*p[0]+u*p[1]) + v*((1-u)*p[2]+u*p[3])) + w*((1-v)*((1-u)*p[4]+u*p[5]) + v*((1-u)*p[6]+u*p[7]));
-//                    Normal cn = (1-w)*((1-v)*((1-u)*n[0]+u*n[1]) + v*((1-u)*n[2]+u*n[3])) + w*((1-v)*((1-u)*n[4]+u*n[5]) + v*((1-u)*n[6]+u*n[7]));
-//                    // store vertex in list
-//                    // compute unique vertex id
-//                    int g_edg = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + 3); // this is the first interior vertex
-//                    int g_idx = set_tvertex(g_edg);
-//                    if (g_idx == -1) {
-//                        TVertex tvertex;
-//                        tvertex.p = cv;
-//                        tvertex.n = cn;
-//                        g_idx = (int)m_tvertices.size();
-//                        tvertex.g_idx = g_idx;
-//                        tvertex.g_edg = g_edg;
-//                        m_tvertices.push_back(tvertex);
-//                        EdgeVertex ev{g_edg,g_idx};
-//                        m_ehash[hashbucket_index(m_nbuckets, g_edg)].push_back(ev);
-//                    }
-//                    Triangle tri81;
-//                    Triangle tri82;
-//                    Triangle tri83;
-//                    Triangle tri84;
-//                    Triangle tri85;
-//                    Triangle tri86;
-//                    Triangle tri87;
-//                    Triangle tri88;
-//                    tri81.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri81.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri81.v[2] = g_idx;
-//                    tri82.v[0] = vertices[get_c(pos_+1,c_)].g_idx; tri82.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri82.v[2] = g_idx;
-//                    tri83.v[0] = vertices[get_c(pos_+2,c_)].g_idx; tri83.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri83.v[2] = g_idx;
-//                    tri84.v[0] = vertices[get_c(pos_+3,c_)].g_idx; tri84.v[1] = vertices[get_c(pos_+4,c_)].g_idx; tri84.v[2] = g_idx;
-//                    tri85.v[0] = vertices[get_c(pos_+4,c_)].g_idx; tri85.v[1] = vertices[get_c(pos_+5,c_)].g_idx; tri85.v[2] = g_idx;
-//                    tri86.v[0] = vertices[get_c(pos_+5,c_)].g_idx; tri86.v[1] = vertices[get_c(pos_+6,c_)].g_idx; tri86.v[2] = g_idx;
-//                    tri87.v[0] = vertices[get_c(pos_+6,c_)].g_idx; tri87.v[1] = vertices[get_c(pos_+7,c_)].g_idx; tri87.v[2] = g_idx;
-//                    tri88.v[0] = vertices[get_c(pos_+7,c_)].g_idx; tri88.v[1] = vertices[get_c(pos_,c_)].g_idx; tri88.v[2] = g_idx;
-//                    m_ttriangles.push_back(tri81);
-//                    m_ttriangles.push_back(tri82);
-//                    m_ttriangles.push_back(tri83);
-//                    m_ttriangles.push_back(tri84);
-//                    m_ttriangles.push_back(tri85);
-//                    m_ttriangles.push_back(tri86);
-//                    m_ttriangles.push_back(tri87);
-//                    m_ttriangles.push_back(tri88);
-//                    //                    std::cout << "case 8: ";
-//                    //                    for (int c8 = 0; c8 < 8; c8++) {
-//                    //                        std::cout << (int)get_c(pos_+c8,c_) << ", ";
-//                    //                    }
-//                    //                    std::cout << std::endl;
-//                }
-//                    break;
-//                case 9:
-//                {
-//                    m_ccases_9 += 1;
-//                    // collect u,v,w,
-//                    double u = (ui[0][0] + ui[0][1] + ui[1][0] + ui[1][1]) / (4-ic[2]);
-//                    double v = (vi[0][0] + vi[0][1] + ui[2][0] + ui[2][1]) / (4-ic[1]);
-//                    double w = (vi[1][0] + vi[1][1] + vi[2][0] + vi[2][1]) / (4-ic[0]);
-//                    // compute vertex: trilinear interpolate
-//                    Point  cv = (1-w)*((1-v)*((1-u)*p[0]+u*p[1]) + v*((1-u)*p[2]+u*p[3])) + w*((1-v)*((1-u)*p[4]+u*p[5]) + v*((1-u)*p[6]+u*p[7]));
-//                    Normal cn = (1-w)*((1-v)*((1-u)*n[0]+u*n[1]) + v*((1-u)*n[2]+u*n[3])) + w*((1-v)*((1-u)*n[4]+u*n[5]) + v*((1-u)*n[6]+u*n[7]));
-//                    // store vertex in list
-//                    // compute unique vertex id
-//                    int g_edg = int(m_cell_shift_factor*m_ugrid.global_index(i, j, k) + 3); // this is the first interior vertex
-//                    int g_idx = set_tvertex(g_edg);
-//                    if (g_idx == -1) {
-//                        TVertex tvertex;
-//                        tvertex.p = cv;
-//                        tvertex.n = cn;
-//                        g_idx = (uint)m_tvertices.size();
-//                        tvertex.g_idx = g_idx;
-//                        tvertex.g_edg = g_edg;
-//                        m_tvertices.push_back(tvertex);
-//                        EdgeVertex ev{g_edg,g_idx};
-//                        m_ehash[hashbucket_index(m_nbuckets, g_edg)].push_back(ev);
-//                    }
-//                    Triangle tri91;
-//                    Triangle tri92;
-//                    Triangle tri93;
-//                    Triangle tri94;
-//                    Triangle tri95;
-//                    Triangle tri96;
-//                    Triangle tri97;
-//                    Triangle tri98;
-//                    Triangle tri99;
-//                    tri91.v[0] = vertices[get_c(pos_,c_)].g_idx;   tri91.v[1] = vertices[get_c(pos_+1,c_)].g_idx; tri91.v[2] = g_idx;
-//                    tri92.v[0] = vertices[get_c(pos_+1,c_)].g_idx; tri92.v[1] = vertices[get_c(pos_+2,c_)].g_idx; tri92.v[2] = g_idx;
-//                    tri93.v[0] = vertices[get_c(pos_+2,c_)].g_idx; tri93.v[1] = vertices[get_c(pos_+3,c_)].g_idx; tri93.v[2] = g_idx;
-//                    tri94.v[0] = vertices[get_c(pos_+3,c_)].g_idx; tri94.v[1] = vertices[get_c(pos_+4,c_)].g_idx; tri94.v[2] = g_idx;
-//                    tri95.v[0] = vertices[get_c(pos_+4,c_)].g_idx; tri95.v[1] = vertices[get_c(pos_+5,c_)].g_idx; tri95.v[2] = g_idx;
-//                    tri96.v[0] = vertices[get_c(pos_+5,c_)].g_idx; tri96.v[1] = vertices[get_c(pos_+6,c_)].g_idx; tri96.v[2] = g_idx;
-//                    tri97.v[0] = vertices[get_c(pos_+6,c_)].g_idx; tri97.v[1] = vertices[get_c(pos_+7,c_)].g_idx; tri97.v[2] = g_idx;
-//                    tri98.v[0] = vertices[get_c(pos_+7,c_)].g_idx; tri98.v[1] = vertices[get_c(pos_+8,c_)].g_idx; tri98.v[2] = g_idx;
-//                    tri99.v[0] = vertices[get_c(pos_+8,c_)].g_idx; tri99.v[1] = vertices[get_c(pos_,c_)].g_idx; tri99.v[2] = g_idx;
-//                    m_ttriangles.push_back(tri91);
-//                    m_ttriangles.push_back(tri92);
-//                    m_ttriangles.push_back(tri93);
-//                    m_ttriangles.push_back(tri94);
-//                    m_ttriangles.push_back(tri95);
-//                    m_ttriangles.push_back(tri96);
-//                    m_ttriangles.push_back(tri97);
-//                    m_ttriangles.push_back(tri98);
-//                    m_ttriangles.push_back(tri99);
-//                    //                    std::cout << "case 9: ";
-//                    //                    for (int c9 = 0; c9 < 9; c9++) {
-//                    //                        std::cout << (int)get_c(pos_+c9,c_) << ", ";
-//                    //                    }
-//                    //                    std::cout << std::endl;
-//                }
-//                    break;
-//                default:
-//                    std::cout << "WARNING: " << c_sz[t] << " vertices in contour " << t << " for i_case: " << i_case << std::endl;
-//                    break;
-//            }
-//        }
-//        pos_ += c_sz[t];
-//    }
-//} // void p_slice()
+void
+tmc::MarchingCubes::p_slice(const int i_index, const int j_index, const int k_index, const double i0, double* F, Point* p, Normal* n, const int i_case)
+{
+	// there are 12 edges, assign to each vertex three edges, the global edge numbering
+	// consist of 3*global_vertex_id + edge_offset.
+	const unsigned long long gei_pattern_ = 670526590282893600ull;
+	const uint axis_mask = 1;
+	const uint offs_mask = 3;
+
+	// code edge end vertices for each of the 12 edges
+	const unsigned char l_edges_[12] = { 16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98 };
+	auto get_edge_vertex = [](const int e, unsigned int& v0, unsigned int& v1, const unsigned char l_edges_[12]) {
+		v0 = (unsigned int)(l_edges_[e] & 0xF);
+		v1 = (unsigned int)(l_edges_[e] >> 4) & 0xF;
+	};
+
+	// A hexahedron has twelve edges, save the intersection of the isosurface with the edge
+	// save global edge and global vertex index of isosurface
+	std::vector<Vertex> vertices(12);
+	// save coordinates of intersection points in 3D
+	std::vector<Point>  ip(12);
+	// save normals of intersection points from scalar data
+	std::vector<Normal> in(12);
+	// save loca coordinate along the edge of intersection point
+	std::vector<double> ecoord{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+	// collect vertices
+	ushort   flag{ 1 };
+	for (int eg = 0; eg < 12; eg++) {
+		vertices[eg].g_edg = -1;
+		vertices[eg].g_idx = -1;
+		if (flag & e_pattern[i_case]) {
+			// the edge global index is given by the vertex global index + the edge offset
+			uint shift = 5 * eg;
+			const int ix = i_index + (int)((gei_pattern_ >> shift) & 1); // global_edge_id[eg][0];
+			const int iy = j_index + (int)((gei_pattern_ >> (shift + 1)) & 1); // global_edge_id[eg][1];
+			const int iz = k_index + (int)((gei_pattern_ >> (shift + 2)) & 1); // global_edge_id[eg][2];
+			const int off_val = (int)((gei_pattern_ >> (shift + 3)) & 3);
+
+			vertices[eg].g_edg = int(m_cell_shift_factor*m_ugrid.global_index(ix, iy, iz) + off_val);
+
+			// generate vertex here, do not care at this point if vertex already exist
+			//int* vert = l_edges[eg];
+			// interpolation weight
+			//uint v0 = (l_edges_[eg]&0xF);
+			//uint v1 = (l_edges_[eg]>>4)&0xF;
+			//            int v0 = vert[0];
+			//            int v1 = vert[1];
+			uint v0, v1;
+			get_edge_vertex(eg, v0, v1, l_edges_);
+
+			double l = (i0 - F[v0]) / (F[v1] - F[v0]);
+			ecoord[eg] = l;
+			// interpolate vertex
+			ip[eg][0] = (1 - l)*p[v0][0] + l*p[v1][0];
+			ip[eg][1] = (1 - l)*p[v0][1] + l*p[v1][1];
+			ip[eg][2] = (1 - l)*p[v0][2] + l*p[v1][2];
+
+			// interpolate normal
+			in[eg][0] = (1 - l)*n[v0][0] + l*n[v1][0];
+			in[eg][1] = (1 - l)*n[v0][1] + l*n[v1][1];
+			in[eg][2] = (1 - l)*n[v0][2] + l*n[v1][2];
+
+			const double n_size = std::sqrt(in[eg][0] * in[eg][0] + in[eg][1] * in[eg][1] + in[eg][2] * in[eg][2]);
+			in[eg][0] /= n_size;
+			in[eg][1] /= n_size;
+			in[eg][2] /= n_size;
+
+			// set vertex in map
+			// set vertex index
+			auto s_index = m_vertices.find(vertices[eg].g_edg);
+			if (s_index == m_vertices.end()) {
+				const int g_idx = (int)m_points.size();
+				vertices[eg].g_idx = g_idx;
+				m_vertices[vertices[eg].g_edg] = g_idx;
+				m_points.push_back(ip[eg]);
+				m_pnorms.push_back(in[eg]);
+			}
+			else {
+				vertices[eg].g_idx = s_index->second;
+			}
+		}
+		/*else {
+		e_set[eg] = false;
+		}*/
+		//next edge
+		flag <<= 1;
+	}
+
+
+	// compute oriented contours
+	// A countour consists of segment at the faces connecting the intersection of the 
+	// iso-surface with the edges. For each edge we store the edge to which the segment
+	// is outgoing and the edge from which the segment in comming. Therefore a contour 
+	// cab be reconstructed by connecting the edges in the direccion of the outgoing.
+	// The contour is oriented in such a way, that the positive vertices are outside.
+	// 1. build segments
+	// 2. connect segments
+	// build up segments
+	// set segments map
+	unsigned char segm_[12] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+	auto set_segm = [](const int e, const int pos, const int val, unsigned char segm_[12]) {
+		if (pos == 0) {
+			segm_[e] &= 0xF0;
+			segm_[e] |= (unsigned char)val & 0xF;
+		}
+		else if (pos == 1) {
+			segm_[e] &= 0xF;
+			segm_[e] |= val << 4;
+		}
+	};
+	auto get_segm = [](const int e, const int pos, unsigned char segm_[12]) {
+		if (pos == 0)
+			return (int)(segm_[e] & 0xF);
+		else
+			return (int)((segm_[e] >> 4) & 0xF);
+	};
+	auto is_segm_set = [](const int e, unsigned char segm_[12]) {
+		return (segm_[e] != 0xFF);
+	};
+	auto unset_segm = [](const int e, unsigned char segm_[12]) {
+		segm_[e] = 0xFF;
+	};
+	// In order to compute oriented segments, the hexahedron has to be flatten. 
+	// The insides of the faces of the hexahedron have to be all at the same 
+	// side of the flattend hexa. This requires changing the order of the 
+	// edges when reading from the faces
+	// code edges at face
+	//unsigned short face_e_[6] = { 12816, 30292, 33936, 46754, 34739, 38305 };
+	std::array<unsigned short, 6> e_face_{ { 291, 18277, 18696, 10859, 33719, 38305 } };
+	// code vertices at face
+	//unsigned short face_v_[6] = { 12816, 30292, 21520, 30258, 25632, 30001 };
+	std::array<unsigned short, 6> v_face_{ { 12576, 25717, 5380, 29538, 8292, 30001 } };
+
+	// reading edge from face
+	auto get_face_e = [e_face_](const int f, const int e) { return ((e_face_[f] >> (4 * e)) & 0xF); };
+	auto get_face_v = [v_face_](const int f, const int e) { return ((v_face_[f] >> (4 * e)) & 0xF); };
+	// compute oriented segments using the isoline scheme at the faces
+	const unsigned int BIT_1 = 1;
+	const unsigned int BIT_2 = 2;
+	const unsigned int BIT_3 = 4;
+	const unsigned int BIT_4 = 8;
+	auto asymptotic_decider = [](const double f0, const double f1, const double f2, const double f3) {
+		return (f0*f3 - f1*f2) / (f0 + f3 - f1 - f2);
+	};
+	for (int f = 0; f < 6; f++) {
+		// classify face
+		unsigned int f_case{ 0 };
+		uint v0 = get_face_v(f, 0);
+		uint v1 = get_face_v(f, 1);
+		uint v2 = get_face_v(f, 2);
+		uint v3 = get_face_v(f, 3);
+		uint e0 = get_face_e(f, 0);
+		uint e1 = get_face_e(f, 1);
+		uint e2 = get_face_e(f, 2);
+		uint e3 = get_face_e(f, 3);
+		double f0 = F[v0];
+		double f1 = F[v1];
+		double f2 = F[v2];
+		double f3 = F[v3];
+		if (f0 >= i0)
+			f_case |= BIT_1;
+		if (f1 >= i0)
+			f_case |= BIT_2;
+		if (f2 >= i0)
+			f_case |= BIT_3;
+		if (f3 >= i0)
+			f_case |= BIT_4;
+		switch (f_case)
+		{
+		case 1:
+			set_segm(e0, 0, e3, segm_);
+			set_segm(e3, 1, e0, segm_);
+			break;
+		case 2:
+			set_segm(e1, 0, e0, segm_);
+			set_segm(e0, 1, e1, segm_);
+			break;
+		case 3:
+			set_segm(e1, 0, e3, segm_);
+			set_segm(e3, 1, e1, segm_);
+			break;
+		case 4:
+			set_segm(e3, 0, e2, segm_);
+			set_segm(e2, 1, e3, segm_);
+			break;
+		case 5:
+			set_segm(e0, 0, e2, segm_);
+			set_segm(e2, 1, e0, segm_);
+			break;
+		case 6:
+		{
+			const double val = asymptotic_decider(f0, f1, f2, f3);
+			if (val >= i0) {
+				set_segm(e3, 0, e0, segm_);
+				set_segm(e0, 1, e3, segm_);
+				set_segm(e1, 0, e2, segm_);
+				set_segm(e2, 1, e1, segm_);
+			}
+			else {
+				set_segm(e1, 0, e0, segm_);
+				set_segm(e0, 1, e1, segm_);
+				set_segm(e3, 0, e2, segm_);
+				set_segm(e2, 1, e3, segm_);
+			}
+		}
+		break;
+		case 7:
+			set_segm(e1, 0, e2, segm_);
+			set_segm(e2, 1, e1, segm_);
+			break;
+		case 8:
+			set_segm(e2, 0, e1, segm_);
+			set_segm(e1, 1, e2, segm_);
+			break;
+		case 9:
+		{
+			const double val = asymptotic_decider(f0, f1, f2, f3);
+			if (val >= i0){
+				set_segm(e0, 0, e1, segm_);
+				set_segm(e1, 1, e0, segm_);
+				set_segm(e2, 0, e3, segm_);
+				set_segm(e3, 1, e2, segm_);
+			}
+			else {
+				set_segm(e0, 0, e3, segm_);
+				set_segm(e3, 1, e0, segm_);
+				set_segm(e2, 0, e1, segm_);
+				set_segm(e1, 1, e2, segm_);
+			}
+		}
+		break;
+		case 10:
+			set_segm(e2, 0, e0, segm_);
+			set_segm(e0, 1, e2, segm_);
+
+			break;
+		case 11:
+			set_segm(e2, 0, e3, segm_);
+			set_segm(e3, 1, e2, segm_);
+
+			break;
+		case 12:
+			set_segm(e3, 0, e1, segm_);
+			set_segm(e1, 1, e3, segm_);
+
+			break;
+		case 13:
+			set_segm(e0, 0, e1, segm_);
+			set_segm(e1, 1, e0, segm_);
+
+			break;
+		case 14:
+			set_segm(e3, 0, e0, segm_);
+			set_segm(e0, 1, e3, segm_);
+			break;
+		default:
+			break;
+		}
+	}
+
+	// connect oriented segments into oriented contours
+	// closed contours are coded in 64 bit unsigned long long
+	// 1) Each entry has 4 bits
+	// 2) The first 4 entries are reserved for the size of the contours
+	// 3) The next 12 entries are the indices of the edges constituting the contorus
+	//    The indices are numbers from 0 to 12
+	unsigned long long c_ = 0xFFFFFFFFFFFF0000;
+	// in the 4 first bits store size of contours
+	auto get_cnt_size = [](const int cnt, unsigned long long &c_) {
+		return (size_t)((c_ & (0xF << 4 * cnt)) >> 4 * cnt);
+	};
+	auto set_cnt_size = [](const int cnt, const int size, unsigned long long &c_) {
+		// unset contour size
+		c_ &= ~(0xF << 4 * cnt);
+		c_ |= (size << 4 * cnt);
+	};
+	// set corresponging edge 
+	auto set_c = [](const int cnt, const int pos, const int val, unsigned long long &c_) {
+		const uint mask[4] = { 0x0, 0xF, 0xFF, 0xFFF };
+		const uint c_sz = c_ & mask[cnt];
+		const uint e = 16 + 4 * ((c_sz & 0xF) + ((c_sz & 0xF0) >> 4) + ((c_sz & 0xF00) >> 8) + pos);
+		c_ &= ~(((unsigned long long)0xF) << e);
+		c_ |= (((unsigned long long)val) << e);
+	};
+	// read edge from contour
+	auto get_c = [](const int cnt, const int pos, unsigned long long c_) {
+		const uint mask[4] = { 0x0, 0xF, 0xFF, 0xFFF };
+		const uint c_sz = (uint)(c_ & mask[cnt]);
+		const uint e = 16 + 4 * ((c_sz & 0xF) + ((c_sz & 0xF0) >> 4) + ((c_sz & 0xF00) >> 8) + pos);
+		return (int)((c_ >> e) & 0xF);
+	};
+
+
+	// connect oriented contours
+	uint cnt_{ 0 };
+	for (uint e = 0; e < 12; e++) {
+		if (is_segm_set(e, segm_)) {
+			uint eTo = get_segm(e, 0, segm_);
+			uint eIn = get_segm(e, 1, segm_);
+			uint eStart = e;
+			uint pos = 0;
+			set_c(cnt_, pos, eStart, c_);
+			while (eTo != eStart) {
+				pos = pos + 1;
+				set_c(cnt_, pos, eTo, c_);
+				eIn = eTo;
+				eTo = get_segm(eIn, 0, segm_);
+				unset_segm(eIn, segm_);
+			}
+			// set contour length
+			set_cnt_size(cnt_, pos + 1, c_);
+			// update number of contours
+			cnt_ = cnt_ + 1;
+		}
+	}
+
+	// compute intersection of opposite faces
+	// It is enough to compute a pair of solutions for one face
+	// The other solutions are obtained by evaluating the equations
+	// for the common variable
+	double ui[2]{};
+	double vi[2]{};
+	double wi[2]{};
+	unsigned char q_sol{ 0 };
+	const double a = (F[0] - F[1])*(-F[6] + F[7] + F[4] - F[5]) - (F[4] - F[5])*(-F[2] + F[3] + F[0] - F[1]);
+	const double b = (i0 - F[0])*(-F[6] + F[7] + F[4] - F[5]) + (F[0] - F[1])*(F[6] - F[4]) - (i0 - F[4])*(-F[2] + F[3] + F[0] - F[1]) - (F[4] - F[5])*(F[2] - F[0]);
+	const double c = (i0 - F[0])*(F[6] - F[4]) - (i0 - F[4])*(F[2] - F[0]);;
+	double d = b*b - 4 * a*c;
+	if (d > 0) {
+		d = std::sqrt(d);
+		// compute u-coord of solutions
+		ui[0] = (-b - d) / (2 * a);
+		ui[1] = (-b + d) / (2 * a);
+		// compute v-coord of solutions
+		double g1 = F[0] * (1 - ui[0]) + F[1] * ui[0];
+		double g2 = F[2] * (1 - ui[0]) + F[3] * ui[0];
+		vi[0] = (i0 - g1) / (g2 - g1);
+		g1 = F[0] * (1 - ui[1]) + F[1] * ui[1];
+		g2 = F[2] * (1 - ui[1]) + F[3] * ui[1];
+		vi[1] = (i0 - g1) / (g2 - g1);
+		// compute w-coordinates of solutions
+		g1 = F[0] * (1 - ui[0]) + F[1] * ui[0];
+		g2 = F[4] * (1 - ui[0]) + F[5] * ui[0];
+		wi[0] = (i0 - g1) / (g2 - g1);
+		g1 = F[0] * (1 - ui[1]) + F[1] * ui[1];
+		g2 = F[4] * (1 - ui[1]) + F[5] * ui[1];
+		wi[1] = (i0 - g1) / (g2 - g1);
+
+		// check solution intervals				
+		if (0 < ui[0] && ui[0] < 1) {
+			q_sol |= 1;
+		}
+		if (0 < ui[1] && ui[1] < 1) {
+			q_sol |= 2;
+		}
+		if (0 < vi[0] && vi[0] < 1) {
+			q_sol |= 4;
+		}
+		if (0 < vi[1] && vi[1] < 1) {
+			q_sol |= 8;
+		}
+		if (0 < wi[0] && wi[0] < 1) {
+			q_sol |= 16;
+		}
+		if (0 < wi[1] && wi[1] < 1) {
+			q_sol |= 32;
+		}
+	}
+
+	//
+	// count the number of set bits
+	auto numberOfSetBits = [](const unsigned char n) {
+		// C or C++: use uint32_t
+		uint b = (uint)n;
+		b = b - ((b >> 1) & 0x55555555);
+		b = (b & 0x33333333) + ((b >> 2) & 0x33333333);
+		return (((b + (b >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+	};
+	// compute the number of solutions to the quadratic equation for a given face
+	auto nrQSolFace = [](const uint f, const unsigned char n)  {
+		uint nr{ 0 };
+		switch (f) {
+		case 0:
+			if ((n & 0x5) == 0x5)
+				nr = nr + 1;
+			if ((n & 0xA) == 0xA)
+				nr = nr + 1;
+			break;
+		case 1:
+			if ((n & 0x11) == 0x11) nr = nr + 1;
+			if ((n & 0x22) == 0x22) nr = nr + 1;
+			break;
+		case 2:
+			if ((n & 0x18) == 0x18) nr = nr + 1;
+			if ((n & 0x24) == 0x24) nr = nr + 1;
+			break;
+		}
+		return nr;
+	};
+
+
+
+	// triangulate contours
+	// if all bits are set, then there are three pairs of nontrivial solutions
+	// to the quadratic equations. In this case, there is a tunnel or a contour
+	// with 12 vertices. If there are three contours, then there is a tunnel and
+	// one of the contorus with only three vertices is not part of it.
+	if (numberOfSetBits(q_sol) == 6) {
+		m_ccases_tunnel += 1;
+		// there are at most three contours
+		// Possible cases:
+		//  1) a single contour with 12 vertices
+		//  2) two contours which build a tunnel
+		//  3) three contours, one has only 3 vertices and does not belong to the tunnel
+
+		// construct the six vertices of the inner hexagon
+		double hvt[6][3];
+		hvt[0][0] = ui[0]; hvt[0][1] = vi[0]; hvt[0][2] = wi[0];
+		hvt[1][0] = ui[0]; hvt[1][1] = vi[0]; hvt[1][2] = wi[1];
+		hvt[2][0] = ui[1]; hvt[2][1] = vi[0]; hvt[2][2] = wi[1];
+		hvt[3][0] = ui[1]; hvt[3][1] = vi[1]; hvt[3][2] = wi[1];
+		hvt[4][0] = ui[1]; hvt[4][1] = vi[1]; hvt[4][2] = wi[0];
+		hvt[5][0] = ui[0]; hvt[5][1] = vi[1]; hvt[5][2] = wi[0];
+
+		// construct vertices at intersections with the edges
+		auto e_vert = [&ecoord](const int e, const int i) {
+			const unsigned int l_coord[3]{ 1324855, 5299420, 16733440 };
+			unsigned char flag = (l_coord[i] >> (2 * e)) & 3;
+			if (flag == 3)
+				return ecoord[e];
+			else
+				return (double)(flag);
+
+		};
+
+		// if there are three contours, then there is a tunnel and one
+		// of the contours is not part of it.
+		unsigned char _not_tunnel = 0xF;
+		if (cnt_ == 3) {
+			// loop over the contorus
+			// triangulate the contour which is not part of 
+			// the tunnel
+			const double uc_min = (ui[0] < ui[1]) ? ui[0] : ui[1];
+			const double uc_max = (ui[0] < ui[1]) ? ui[1] : ui[0];
+			for (int t = 0; t < (int)cnt_; t++) {
+				if (get_cnt_size(t, c_) == 3) {
+					double umin = 2;
+					double umax = -2;
+					uint e0 = get_c(t, 0, c_);
+					uint e1 = get_c(t, 1, c_);
+					uint e2 = get_c(t, 2, c_);
+					const double u_e0 = e_vert(e0, 0);
+					const double u_e1 = e_vert(e1, 0);
+					const double u_e2 = e_vert(e2, 0);
+					umin = (u_e0 < umin) ? u_e0 : umin;
+					umin = (u_e1 < umin) ? u_e1 : umin;
+					umin = (u_e2 < umin) ? u_e2 : umin;
+					umax = (u_e0 > umax) ? u_e0 : umax;
+					umax = (u_e1 > umax) ? u_e1 : umax;
+					umax = (u_e2 > umax) ? u_e1 : umax;
+					if (uc_min > umax || uc_max < umin) {
+						// this contour is not part of the tunnel
+						_not_tunnel = t;
+						Triangle tr;
+						tr.v[0] = vertices[e0].g_idx;
+						tr.v[1] = vertices[e1].g_idx;
+						tr.v[2] = vertices[e2].g_idx;
+						m_triangles.push_back(tr);
+						m_ccases_3++;
+					}
+				}
+			}
+		}
+
+		// compute vertices of inner hexagon, save new vertices in list and compute and keep 
+		// global vertice index to build triangle connectivity later on.
+		uint tg_idx[6];
+		for (int i = 0; i < 6; i++) {
+			Point  hp;
+			Normal hn;
+			const double u = hvt[i][0]; const double v = hvt[i][1]; const double w = hvt[i][2];
+			hp[0] = (1 - w)*((1 - v)*(p[0][0] + u*(p[1][0] - p[0][0])) + v*(p[2][0] + u*(p[3][0] - p[2][0]))) + w*((1 - v)*(p[4][0] + u*(p[5][0] - p[4][0])) + v*(p[6][0] + u*(p[7][0] - p[6][0])));
+			hp[1] = (1 - w)*((1 - v)*(p[0][1] + u*(p[1][1] - p[0][1])) + v*(p[2][1] + u*(p[3][1] - p[2][1]))) + w*((1 - v)*(p[4][1] + u*(p[5][1] - p[4][1])) + v*(p[6][1] + u*(p[7][1] - p[6][1])));
+			hp[2] = (1 - w)*((1 - v)*(p[0][2] + u*(p[1][2] - p[0][2])) + v*(p[2][2] + u*(p[3][2] - p[2][2]))) + w*((1 - v)*(p[4][2] + u*(p[5][2] - p[4][2])) + v*(p[6][2] + u*(p[7][2] - p[6][2])));
+			hn[0] = (1 - w)*((1 - v)*(n[0][0] + u*(n[1][0] - n[0][0])) + v*(n[2][0] + u*(n[3][0] - n[2][0]))) + w*((1 - v)*(n[4][0] + u*(n[5][0] - n[4][0])) + v*(n[6][0] + u*(n[7][0] - n[6][0])));
+			hn[1] = (1 - w)*((1 - v)*(n[0][1] + u*(n[1][1] - n[0][1])) + v*(n[2][1] + u*(n[3][1] - n[2][1]))) + w*((1 - v)*(n[4][1] + u*(n[5][1] - n[4][1])) + v*(n[6][1] + u*(n[7][1] - n[6][1])));
+			hn[2] = (1 - w)*((1 - v)*(n[0][2] + u*(n[1][2] - n[0][2])) + v*(n[2][2] + u*(n[3][2] - n[2][2]))) + w*((1 - v)*(n[4][2] + u*(n[5][2] - n[4][2])) + v*(n[6][2] + u*(n[7][2] - n[6][2])));
+			// normalize normal
+			const double factor = std::sqrt(hn[0] * hn[0] + hn[1] * hn[1] + hn[2] * hn[2]);
+			hn[0] = hn[0] / factor;
+			hn[1] = hn[1] / factor;
+			hn[2] = hn[2] / factor;
+			tg_idx[i] = (uint)m_points.size();
+			m_points.push_back(hp);
+			m_pnorms.push_back(hn);
+		}
+
+
+		// triangulate contours with inner hexagon
+		unsigned char tcon_[12];
+		for (int i = 0; i < (int)cnt_; i++) {
+			if (_not_tunnel != i) { // contour belongs to tunnel
+				const int cnt_sz = (int)get_cnt_size(i, c_);
+				for (int r = 0; r < cnt_sz; r++) {
+					uint index = -1;
+					double dist = 1000.;
+					uint ci = get_c(i, r, c_);
+					const double u_edge = e_vert(ci, 0);
+					const double v_edge = e_vert(ci, 1);
+					const double w_edge = e_vert(ci, 2);
+					for (int s = 0; s < 6; s++) {
+						const double uval = u_edge - hvt[s][0];
+						const double vval = v_edge - hvt[s][1];
+						const double wval = w_edge - hvt[s][2];
+						double val = uval*uval + vval*vval + wval*wval;
+						if (dist > val) {
+							index = s;
+							dist = val;
+						}
+					}
+					tcon_[ci] = (unsigned char)index;
+				}
+
+				// correspondence between vertices found
+				// create triangles
+				// needs some functions
+				auto distanceRingIntsModulo = [](const int d1, const int d2) {
+					const int r = (d1 - d2) < 0 ? d2 - d1 : d1 - d2;
+					return (r > 2 ? 6 - r : r);
+				};
+				auto midpointRingIntModulo = [](const int d1, const int d2) {
+					const int dmax = (d1 > d2) ? d1 : d2;
+					const int dmin = (d1 < d2) ? d1 : d2;
+					return ((dmax + 2) % 6 == dmin) ? (dmax + 1) % 6 : (dmax + dmin) / 2;
+				};
+
+				for (int r = 0; r < cnt_sz; r++) {
+					const uint tid1 = get_c(i, r, c_);
+					const uint tid2 = get_c(i, ((r + 1) % cnt_sz), c_);
+					const uint cid1 = tcon_[tid1];
+					const uint cid2 = tcon_[tid2];
+					// compute index distance
+					const int dst = distanceRingIntsModulo(cid1, cid2);
+					switch (dst)
+					{
+					case 0:
+					{
+						Triangle tr;
+						tr.v[0] = vertices[tid1].g_idx;
+						tr.v[1] = vertices[tid2].g_idx;
+						tr.v[2] = tg_idx[cid1];
+						m_triangles.push_back(tr);
+					}
+					break;
+					case 1:
+					{
+						// measure diagonals
+						// triangulate along shortest diagonal
+						double u_edge = e_vert(tid1, 0);
+						double v_edge = e_vert(tid1, 1);
+						double w_edge = e_vert(tid1, 2);
+						const double l1 = (u_edge - hvt[cid2][0])*(u_edge - hvt[cid2][0]) + (v_edge - hvt[cid2][1])*(v_edge - hvt[cid2][1]) + (w_edge - hvt[cid2][2])*(w_edge - hvt[cid2][2]);
+						u_edge = e_vert(tid2, 0);
+						v_edge = e_vert(tid2, 1);
+						w_edge = e_vert(tid2, 2);
+						const double l2 = (u_edge - hvt[cid1][0])*(u_edge - hvt[cid1][0]) + (v_edge - hvt[cid1][1])*(v_edge - hvt[cid1][1]) + (w_edge - hvt[cid1][2])*(w_edge - hvt[cid1][2]);
+						Triangle t1;
+						Triangle t2;
+						if (l1 < l2) {
+							t1.v[0] = vertices[tid1].g_idx;
+							t1.v[1] = vertices[tid2].g_idx;
+							t1.v[2] = tg_idx[cid2];
+							t2.v[0] = vertices[tid1].g_idx;
+							t2.v[1] = tg_idx[cid2];
+							t2.v[2] = tg_idx[cid1];
+						}
+						else {
+							t1.v[0] = vertices[tid1].g_idx;
+							t1.v[1] = vertices[tid2].g_idx;
+							t1.v[2] = tg_idx[cid1];
+							t2.v[0] = vertices[tid2].g_idx;
+							t2.v[1] = tg_idx[cid2];
+							t2.v[2] = tg_idx[cid1];
+						}
+						m_triangles.push_back(t1);
+						m_triangles.push_back(t2);
+					}
+					break;
+					case 2:
+					{
+						const int cidm = midpointRingIntModulo(cid1, cid2);
+						Triangle t1;
+						Triangle t2;
+						Triangle t3;
+						t1.v[0] = vertices[tid1].g_idx;
+						t1.v[1] = vertices[tid2].g_idx;
+						t1.v[2] = tg_idx[cidm];
+
+						t2.v[0] = vertices[tid1].g_idx;
+						t2.v[1] = tg_idx[cidm];
+						t2.v[2] = tg_idx[cid1];
+
+						t3.v[0] = vertices[tid2].g_idx;
+						t3.v[1] = tg_idx[cid2];
+						t3.v[2] = tg_idx[cidm];
+
+						m_triangles.push_back(t1);
+						m_triangles.push_back(t2);
+						m_triangles.push_back(t3);
+					}
+					break;
+					} // switch
+				} // for loop over the vertices of the contour
+			} // if (_not_tunnel) 	
+		} // for loop over contours
+		if (cnt_ == 1) {
+			m_ccases_tunnel = m_ccases_tunnel - 1;
+			m_ccases_12cont++;
+			// there is a single contour
+			// triangulate and close inner hexagon
+			Triangle t1;
+			Triangle t2;
+			Triangle t3;
+			Triangle t4;
+			t1.v[0] = tg_idx[0]; t1.v[1] = tg_idx[2]; t1.v[2] = tg_idx[1];
+			t2.v[0] = tg_idx[2]; t2.v[1] = tg_idx[4]; t2.v[2] = tg_idx[3];
+			t3.v[0] = tg_idx[0]; t3.v[1] = tg_idx[5]; t3.v[2] = tg_idx[4];
+			t4.v[0] = tg_idx[0]; t4.v[1] = tg_idx[4]; t4.v[2] = tg_idx[2];
+			m_triangles.push_back(t1);
+			m_triangles.push_back(t2);
+			m_triangles.push_back(t3);
+			m_triangles.push_back(t4);
+		}
+	}
+	else {
+		// there is no tunnel
+		// handle case with no saddle point as simple polygons with 3, 4, 5 or six vertices
+		const unsigned char nr_u{ (unsigned char)nrQSolFace(0, q_sol) };
+		const unsigned char nr_v{ (unsigned char)nrQSolFace(1, q_sol) };
+		const unsigned char nr_w{ (unsigned char)nrQSolFace(2, q_sol) };
+		const unsigned char nr_t{ (unsigned char)(nr_u + nr_v + nr_w) };
+		if (nr_t == nr_u || nr_t == nr_v || nr_t == nr_w) {
+			// loop over all contours
+			for (int i = 0; i < (int)cnt_; i++) {
+				switch (get_cnt_size(i, c_)) {
+				case 3:
+				{
+					Triangle t1;
+					t1.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t1.v[1] = vertices[get_c(i, 1, c_)].g_idx;
+					t1.v[2] = vertices[get_c(i, 2, c_)].g_idx;
+					m_triangles.push_back(t1);
+					m_ccases_3++;
+				}
+				break;
+				case 4:
+				{
+					Triangle t1;
+					Triangle t2;
+					t1.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t1.v[1] = vertices[get_c(i, 1, c_)].g_idx;
+					t1.v[2] = vertices[get_c(i, 2, c_)].g_idx;
+					t2.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t2.v[1] = vertices[get_c(i, 2, c_)].g_idx;
+					t2.v[2] = vertices[get_c(i, 3, c_)].g_idx;
+					m_triangles.push_back(t1);
+					m_triangles.push_back(t2);
+					m_ccases_4++;
+				}
+				break;
+				case 5:
+				{
+					Triangle t1;
+					Triangle t2;
+					Triangle t3;
+					t1.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t1.v[1] = vertices[get_c(i, 1, c_)].g_idx;
+					t1.v[2] = vertices[get_c(i, 2, c_)].g_idx;
+					t2.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t2.v[1] = vertices[get_c(i, 2, c_)].g_idx;
+					t2.v[2] = vertices[get_c(i, 3, c_)].g_idx;
+					t3.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t3.v[1] = vertices[get_c(i, 3, c_)].g_idx;
+					t3.v[2] = vertices[get_c(i, 4, c_)].g_idx;
+					m_triangles.push_back(t1);
+					m_triangles.push_back(t2);
+					m_triangles.push_back(t3);
+					m_ccases_5++;
+				}
+				break;
+				case 6:
+				{
+					Triangle t1;
+					Triangle t2;
+					Triangle t3;
+					Triangle t4;
+					t1.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t1.v[1] = vertices[get_c(i, 1, c_)].g_idx;
+					t1.v[2] = vertices[get_c(i, 3, c_)].g_idx;
+					t2.v[0] = vertices[get_c(i, 1, c_)].g_idx;
+					t2.v[1] = vertices[get_c(i, 2, c_)].g_idx;
+					t2.v[2] = vertices[get_c(i, 3, c_)].g_idx;
+					t3.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t3.v[1] = vertices[get_c(i, 3, c_)].g_idx;
+					t3.v[2] = vertices[get_c(i, 4, c_)].g_idx;
+					t4.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t4.v[1] = vertices[get_c(i, 4, c_)].g_idx;
+					t4.v[2] = vertices[get_c(i, 5, c_)].g_idx;
+					m_triangles.push_back(t1);
+					m_triangles.push_back(t2);
+					m_triangles.push_back(t3);
+					m_triangles.push_back(t4);
+					m_ccases_6++;
+				}
+				break;
+				} // switch over size of contour
+			} // loop over contorus
+		} // thre are no saddle points
+		else {
+			// there are saddle points
+			//fc1 = fs(1, 1)*fs(2, 1) + fs(1, 2)*fs(2, 2);
+			//fc2 = fs(1, 1)*fs(3, 1) + fs(1, 2)*fs(3, 2);
+			//fc3 = fs(2, 1)*fs(3, 2) + fs(2, 2)*fs(3, 1);
+			unsigned char fs[3][2]{{(uchar)(q_sol & 1), (uchar)((q_sol >> 1) & 1)}, { (uchar)((q_sol >> 2) & 1), (uchar)((q_sol >> 3) & 1) }, { (uchar)((q_sol >> 4) & 1), (uchar)((q_sol >> 5) & 1) }};
+
+			const unsigned char fc1 = fs[0][0] * fs[1][0] + fs[0][1] * fs[1][1];
+			const unsigned char fc2 = fs[0][0] * fs[2][0] + fs[0][1] * fs[2][1];
+			const unsigned char fc3 = fs[1][0] * fs[2][1] + fs[1][1] * fs[2][0];
+			const unsigned char c_faces = fc1 + fc2 + fc3;
+			double ucoord{};
+			double vcoord{};
+			double wcoord{};
+			switch (c_faces) {
+			case 2:
+			{
+				if (fc1 == 0) {
+					ucoord = fs[0][0] * ui[0] + fs[0][1] * ui[1];
+					vcoord = fs[1][0] * vi[0] + fs[1][1] * vi[1];
+					wcoord = fs[1][0] * wi[1] + fs[1][1] * wi[0];
+				}
+				else if (fc2 == 0) {
+					ucoord = fs[0][0] * ui[0] + fs[0][1] * ui[1];
+					vcoord = fs[0][0] * vi[0] + fs[0][1] * vi[1];
+					wcoord = fs[0][0] * wi[1] + fs[0][1] * wi[0];
+				}
+				else if (fc3 == 0) {
+					ucoord = fs[1][0] * ui[0] + fs[1][1] * ui[1];
+					vcoord = fs[1][0] * vi[0] + fs[1][1] * vi[1];
+					wcoord = fs[1][0] * wi[0] + fs[1][1] * wi[1];
+				}
+			}
+			break;
+			case 3:
+			{
+				ucoord = (fs[0][0] * ui[0] + fs[0][1] * ui[1]) / (fs[0][0] + fs[0][1]);
+				vcoord = (fs[1][0] * vi[0] + fs[1][1] * vi[1]) / (fs[1][0] + fs[1][1]);
+				wcoord = (fs[2][0] * wi[0] + fs[2][1] * wi[1]) / (fs[2][0] + fs[2][1]);
+			}
+			break;
+			case 4:
+			{
+				const unsigned char nr_u = fs[0][0] + fs[0][1];
+				const unsigned char nr_v = fs[1][0] + fs[1][1];
+				const unsigned char nr_w = fs[2][0] + fs[2][1];
+				if (nr_w == 1) {
+					ucoord = fs[2][0] * ui[0] + fs[2][1] * ui[1];
+					vcoord = fs[2][1] * vi[0] + fs[2][0] * vi[1];
+					wcoord = fs[2][0] * wi[0] + fs[2][1] * wi[1];
+				}
+				else if (nr_v == 1) {
+					ucoord = fs[1][0] * ui[0] + fs[1][1] * ui[1];
+					vcoord = fs[1][0] * vi[0] + fs[1][1] * vi[1];
+					wcoord = fs[1][1] * wi[0] + fs[1][0] * wi[1];
+				}
+				else if (nr_u == 1) {
+					ucoord = fs[0][0] * ui[0] + fs[0][1] * ui[1];
+					vcoord = fs[0][0] * vi[0] + fs[0][1] * vi[1];
+					wcoord = fs[0][0] * wi[0] + fs[0][1] * wi[1];
+				}
+			}
+			break;
+			} // switch(c_faces)
+
+			// create inner vertex
+			Point  ip;
+			Normal in;
+			ip[0] = (1 - wcoord)*((1 - vcoord)*(p[0][0] + ucoord*(p[1][0] - p[0][0])) + vcoord*(p[2][0] + ucoord*(p[3][0] - p[2][0]))) + wcoord*((1 - vcoord)*(p[4][0] + ucoord*(p[5][0] - p[4][0])) + vcoord*(p[6][0] + ucoord*(p[7][0] - p[6][0])));
+			ip[1] = (1 - wcoord)*((1 - vcoord)*(p[0][1] + ucoord*(p[1][1] - p[0][1])) + vcoord*(p[2][1] + ucoord*(p[3][1] - p[2][1]))) + wcoord*((1 - vcoord)*(p[4][1] + ucoord*(p[5][1] - p[4][1])) + vcoord*(p[6][1] + ucoord*(p[7][1] - p[6][1])));
+			ip[2] = (1 - wcoord)*((1 - vcoord)*(p[0][2] + ucoord*(p[1][2] - p[0][2])) + vcoord*(p[2][2] + ucoord*(p[3][2] - p[2][2]))) + wcoord*((1 - vcoord)*(p[4][2] + ucoord*(p[5][2] - p[4][2])) + vcoord*(p[6][2] + ucoord*(p[7][2] - p[6][2])));
+			in[0] = (1 - wcoord)*((1 - vcoord)*(n[0][0] + ucoord*(n[1][0] - n[0][0])) + vcoord*(n[2][0] + ucoord*(n[3][0] - n[2][0]))) + wcoord*((1 - vcoord)*(n[4][0] + ucoord*(n[5][0] - n[4][0])) + vcoord*(n[6][0] + ucoord*(n[7][0] - n[6][0])));
+			in[1] = (1 - wcoord)*((1 - vcoord)*(n[0][1] + ucoord*(n[1][1] - n[0][1])) + vcoord*(n[2][1] + ucoord*(n[3][1] - n[2][1]))) + wcoord*((1 - vcoord)*(n[4][1] + ucoord*(n[5][1] - n[4][1])) + vcoord*(n[6][1] + ucoord*(n[7][1] - n[6][1])));
+			in[2] = (1 - wcoord)*((1 - vcoord)*(n[0][2] + ucoord*(n[1][2] - n[0][2])) + vcoord*(n[2][2] + ucoord*(n[3][2] - n[2][2]))) + wcoord*((1 - vcoord)*(n[4][2] + ucoord*(n[5][2] - n[4][2])) + vcoord*(n[6][2] + ucoord*(n[7][2] - n[6][2])));
+			// normalize normal
+			const double factor = std::sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);
+			in[0] = in[0] / factor;
+			in[1] = in[1] / factor;
+			in[2] = in[2] / factor;
+			const uint g_index = (uint)m_points.size();
+			m_points.push_back(ip);
+			m_pnorms.push_back(in);
+			// loop over the contorus
+			for (int i = 0; i < (int)cnt_; i++) {
+				const unsigned char cnt_sz = (unsigned char)get_cnt_size(i, c_);
+				if (cnt_sz == 3) {
+					Triangle t1;
+					t1.v[0] = vertices[get_c(i, 0, c_)].g_idx;
+					t1.v[1] = vertices[get_c(i, 1, c_)].g_idx;
+					t1.v[2] = vertices[get_c(i, 2, c_)].g_idx;
+					m_triangles.push_back(t1);
+				}
+				else {
+					for (int t = 0; t < cnt_sz; t++) {
+						Triangle ts;
+						ts.v[0] = vertices[get_c(i, t, c_)].g_idx;
+						ts.v[1] = vertices[get_c(i, (t + 1) % cnt_sz, c_)].g_idx;
+						ts.v[2] = g_index;
+						m_triangles.push_back(ts);
+					}
+				}
+				switch (cnt_sz) {
+				case 3:
+					m_ccases_3++;
+					break;
+				case 4:
+					m_ccases_4++;
+					break;
+				case 5:
+					m_ccases_5++;
+					break;
+				case 6:
+					m_ccases_6a++;
+					break;
+				case 7:
+					m_ccases_7++;
+					break;
+				case 8:
+					m_ccases_8++;
+					break;
+				case 9:
+					m_ccases_9++;
+					break;
+				default:
+					break;
+				}
+			}
+		} // else - there are saddle points
+	}
+
+} // void p_slice()
 
 
 //*******************************************************************************************************************************************
@@ -1803,7 +1816,7 @@ tmc::MarchingCubes::UGrid::init(const int nx,const int ny,const int nz)
         for(int j = 0; j <= 1; j++) {
             for(int k = 0; k <= 1; k++) {
                 int index = i*4 + j*2 + k;
-                m_bbox[index] = Point{double(k),double(j),double(i)};
+				m_bbox[index] = Point{ { double(k), double(j), double(i) } };
             }
         }
     }
@@ -1821,16 +1834,16 @@ tmc::MarchingCubes::UGrid::init(const int nx,const int ny,const int nz,std::arra
     m_nz = nz;
     // total number of grid points
     size_t tot_size = m_nx*m_ny*m_nz;
-    // initialize scalar fields
-    m_scalars.clear();
-    m_normals.clear();
-    m_scalars.resize(tot_size,0);
-    m_normals.resize(tot_size);
-    for (auto& p : m_normals) {
-        p[0] = 0;
-        p[1] = 0;
-        p[2] = 0;
-    }
+	m_scalars.clear();
+	m_scalars.resize(tot_size,0);
+	m_normals.clear();
+	m_normals.resize(tot_size);
+	for (auto& n : m_normals) {
+		n[0] = 0;
+		n[1] = 0;
+		n[2] = 0;
+	}
+
     // create bounding box
     // fastest index is x, then y and slowest index is z
     for(int i = 0; i <= 1; i++) {
@@ -2068,9 +2081,161 @@ tmc::MarchingCubes::UniformGrid::interpolate_normal(const Point& p, Normal& n)
              + w*((1-v)*((1-u)*n100[2] + u*n101[2]) + v*((1-u)*n110[2] + u*n111[2]));
         return true;
     } else {
-        n = Normal{0,0,0};
+		n = Normal{ { 0, 0, 0 } };
         return false;
     }
+}
+
+
+//*******************************************************************************************************************************************
+//  IMPLEMENTATION t_mc
+//*******************************************************************************************************************************************
+void
+tmc::MarchingCubes::s_mc(const double i0, UGrid& ugrid, std::vector<Point>& v_list, std::vector<Normal>& n_list, std::vector<Triangle>& t_list)
+{
+	// edges are uniquely characterized by the two end vertices, which have a unique vertex id
+	// the end vertices of the edge are computed in the cell by giving the indices (i,j,k).
+	// These indices are obtained from the cell index by adding 0 or 1 to i, j or k respectively
+	// Example: edge 0: (i,j,k) - (i+1,j,k)
+	//          edge 1: (i+1,j,k) - (i+1,j+1,k)
+	// The first 3 indices are for the first vertex and the second 3 for the second vertex.
+	// there are 12 edges, assign to each vertex three edges, the global edge numbering
+	// consist of 3*global_vertex_id + edge_offset.
+	const int global_edge_id[][4] = { { 0, 0, 0, 0 }, { 1, 0, 0, 1 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 },
+	{ 0, 0, 1, 0 }, { 1, 0, 1, 1 }, { 0, 1, 1, 0 }, { 0, 0, 1, 1 },
+	{ 0, 0, 0, 2 }, { 1, 0, 0, 2 }, { 1, 1, 0, 2 }, { 0, 1, 0, 2 } };
+	// the end vertices of an edge
+	int l_edges[12][2] = { { 0, 1 }, { 1, 3 }, { 2, 3 }, { 0, 2 },
+	{ 4, 5 }, { 5, 7 }, { 6, 7 }, { 4, 6 },
+	{ 0, 4 }, { 1, 5 }, { 3, 7 }, { 2, 6 } };
+	// compute sizes
+	const int nx = ugrid.x_size();
+	const int ny = ugrid.y_size();
+	const int nz = ugrid.z_size();
+
+	// we need to compute up to 3 vertices at the interior of a cell, therefore
+	// the cell shift factor is set to 3+3 = 6, i.e. 3 edges assigned to a cell for global numberig
+	// and 3 vertices in the interior of the cell
+	m_cell_shift_factor = 3;
+
+	// there can be at most 12 intersections
+	std::vector<Vertex> vertices(12);
+	std::vector<Point>  ip(12);
+	std::vector<Normal> in(12);
+	// compute a unique global index for vertices
+	// use as key the unique edge number
+	std::map<int, int> v_map;
+
+	timer.start();
+	// marching cubes
+	for (int k = 0; k < (nz - 1); k++) {
+		m_kindex = k;
+		for (int j = 0; j < (ny - 1); j++) {
+			m_jindex = j;
+			for (int i = 0; i < (nx - 1); i++) {
+				m_iindex = i;
+				// slice hex
+				// collect function values and build index
+				double u[8];
+				Point  p[8];
+				Normal n[8];
+				int vi{ 0 };
+				std::bitset<8> index = 0;
+				for (int kl = 0; kl <= 1; kl++) {
+					for (int jl = 0; jl <= 1; jl++) {
+						for (int il = 0; il <= 1; il++) {
+							// collect scalar values and computex index
+							p[vi] = ugrid.point(i + il, j + jl, k + kl);
+							u[vi] = ugrid.scalar(i + il, j + jl, k + kl);
+							if (u[vi] >= i0) {
+								//index.set(VertexMapping[vi]);
+								index.set(vi);
+
+							}
+							// probably better get normals here
+							n[vi] = ugrid.normal(i + il, j + jl, k + kl);
+							// next cell vertex
+							vi++;
+						}
+					}
+				}
+
+				// collect edges from table and
+				// interpolate triangle vertex positon
+				int i_case = int(index.to_ullong());
+				// compute for this case the vertices
+				ushort flag = 1;
+				for (int eg = 0; eg < 12; eg++) {
+					if (flag & e_pattern[i_case]) {
+						// the edge global index is given by the vertex global index + the edge offset
+						const int ix = i + global_edge_id[eg][0];
+						const int iy = j + global_edge_id[eg][1];
+						const int iz = k + global_edge_id[eg][2];
+						vertices[eg].g_edg = uint(m_cell_shift_factor*ugrid.global_index(ix, iy, iz) + global_edge_id[eg][3]);
+						// generate vertex here, do not care at this point if vertex already exist
+						int* vert = l_edges[eg];
+						// interpolation weight
+						const int v0 = vert[0];
+						const int v1 = vert[1];
+						double l = (i0 - u[v0]) / (u[v1] - u[v0]);
+						// interpolate vertex
+						ip[eg][0] = (1 - l)*p[v0][0] + l*p[v1][0];
+						ip[eg][1] = (1 - l)*p[v0][1] + l*p[v1][1];
+						ip[eg][2] = (1 - l)*p[v0][2] + l*p[v1][2];
+
+						// interpolate normal
+						in[eg][0] = (1 - l)*n[v0][0] + l*n[v1][0];
+						in[eg][1] = (1 - l)*n[v0][1] + l*n[v1][1];
+						in[eg][2] = (1 - l)*n[v0][2] + l*n[v1][2];
+						const double nlength = std::sqrt(in[eg][0] * in[eg][0] + in[eg][1] * in[eg][1] + in[eg][2] * in[eg][2]);
+						in[eg][0] = in[eg][0] / nlength;
+						in[eg][1] = in[eg][1] / nlength;
+						in[eg][2] = in[eg][2] / nlength;
+
+						// set vertex index
+						auto s_index = v_map.find(vertices[eg].g_edg);
+						if (s_index == v_map.end()) {
+							// index not found! Add index to hash map
+							const int g_idx = (int)v_list.size();
+							v_map[vertices[eg].g_edg] = g_idx;
+							vertices[eg].g_idx = g_idx;
+							v_list.push_back(ip[eg]);
+							n_list.push_back(in[eg]);
+						}
+						else {
+							vertices[eg].g_idx = s_index->second; // this is vertex global index g_idx
+						}
+					}
+					flag <<= 1;
+				}
+
+				// construct triangles
+				for (int t = 0; t < 16; t += 3) {
+					const int t_index = i_case * 16 + t;
+					//if (e_tris_list[t_index] == 0x7f)
+					if (t_pattern[t_index] == -1)
+						break;
+					Triangle tri;
+					const int eg0 = t_pattern[t_index];
+					const int eg1 = t_pattern[t_index + 1];
+					const int eg2 = t_pattern[t_index + 2];
+					tri.v[0] = (int)vertices[eg0].g_idx;
+					tri.v[1] = (int)vertices[eg1].g_idx;
+					tri.v[2] = (int)vertices[eg2].g_idx;
+
+					// insert new triangle in list
+					t_list.push_back(tri);
+				}
+			}
+		}
+	}
+
+	timer.stop();
+	std::cout << "Standard Marching Cubes: \n";
+	timer.print();
+
+	std::cout << "tot. nr. of vertices:        " << v_list.size() << std::endl;
+	std::cout << "tot. nr. of triangles:       " << t_list.size() << std::endl;
 }
 
 
@@ -2086,331 +2251,6 @@ tmc::MarchingCubes::UGrid::trilinear(const double u, const double v, const doubl
     return val;
 }
 
-
-
-
-
-////*******************************************************************************************************************************************
-////  IMPLEMENTATION function for test purposes
-////*******************************************************************************************************************************************
-//// interpolate the vector data at input position
-//void
-//tmc::MarchingCubes::processOneCell(std::vector<float>& bbox_v,std::vector<float>& bbox_n,std::vector<float>& bbox_c,std::vector<uint>& bbox_e,
-//                                                      std::vector<std::vector<float>>& v,  std::vector<std::vector<float>>& n,
-//                                                      std::vector<std::vector<float>>& c,  std::vector<std::vector<uint>>&  e,
-//                                                      std::vector<std::vector<float>>& tv, std::vector<std::vector<float>>& tn,
-//                                                      std::vector<std::vector<float>>& tc, std::vector<std::vector<uint>>&  te,
-//                                                      std::vector<float>& points,std::vector<float>& pnorms)
-//{
-//
-//    double xmax = 1;
-//    double ymax = 1;
-//    double zmax = 0.3 / 0.4;
-//    // set bounding box
-//    bbox_v.resize(3*8);
-//    int pos = 0;
-//    for (int k = 0; k < 2; k++) {
-//        for (int j = 0; j < 2; j++) {
-//            for (int i = 0; i < 2; i++) {
-//                bbox_v[3*pos + 0] = (float)i*xmax;
-//                bbox_v[3*pos + 1] = (float)j*ymax;
-//                bbox_v[3*pos + 2] = (float)k*zmax;
-//                pos++;
-//            }
-//        }
-//    }
-//    // compute bbox normals at 8 vertices
-//    bbox_n.resize(3*8);
-//    pos = 0;
-//    for (int k = 0; k < 2; k++) {
-//        for (int j = 0; j < 2; j++) {
-//            for (int i = 0; i < 2; i++) {
-//                float vn[3];
-//                vn[0] = (i == 0) ? -xmax : xmax;
-//                vn[1] = (j == 0) ? -ymax : ymax;
-//                vn[2] = (k == 0) ? -ymax : zmax;
-//                //float sz = std::sqrt(3);
-//                float sz = std::sqrt(vn[0]*vn[0] + vn[1]*vn[1] + vn[2]*vn[2]);
-//                bbox_n[3*pos + 0] = vn[0]/sz;
-//                bbox_n[3*pos + 1] = vn[1]/sz;
-//                bbox_n[3*pos + 2] = vn[2]/sz;
-//                pos++;
-//            }
-//        }
-//    }
-//    // compute colors
-//    bbox_c.resize(3*8);
-//    pos = 0;
-//    float bbc[8][3] = {{0.1,0.1,0.1},{1,0,0},{0,1,0},{0.8,0.8,0.8},{0,0,1},{0.8,0.8,0.8},{0.8,0.8,0.8},{0.9,0.9,0.9}};
-//    for (int k = 0; k < 2; k++) {
-//        for (int j = 0; j < 2; j++) {
-//            for (int i = 0; i < 2; i++) {
-//                bbox_c[3*pos + 0] = bbc[pos][0];
-//                bbox_c[3*pos + 1] = bbc[pos][1];
-//                bbox_c[3*pos + 2] = bbc[pos][2];
-//                pos++;
-//            }
-//        }
-//    }
-//    // compute lines segemests
-//    bbox_e.resize(2*12); // there are 12 edges
-//    pos = 0;
-//    bbox_e[pos++]  = 0; bbox_e[pos++] = 1;
-//    bbox_e[pos++]  = 1; bbox_e[pos++] = 3;
-//    bbox_e[pos++]  = 3; bbox_e[pos++] = 2;
-//    bbox_e[pos++]  = 2; bbox_e[pos++] = 0;
-//
-//    bbox_e[pos++]  = 4; bbox_e[pos++] = 5;
-//    bbox_e[pos++]  = 5; bbox_e[pos++] = 7;
-//    bbox_e[pos++]  = 7; bbox_e[pos++] = 6;
-//    bbox_e[pos++]  = 6; bbox_e[pos++] = 4;
-//
-//    bbox_e[pos++]  = 0; bbox_e[pos++] = 4;
-//    bbox_e[pos++]  = 1; bbox_e[pos++] = 5;
-//    bbox_e[pos++]  = 3; bbox_e[pos++] = 7;
-//    bbox_e[pos++]  = 2; bbox_e[pos++] = 6;
-//
-//    // create scalar field
-//    int mc = 105;
-//    std::array<double,8> F{};
-//    if (mc == 30) {
-//        // tunnel, the first has even two tunnels
-//        // the first example has 5 tunnels
-//        // F = std::array<double, 8>{-3.37811990337124,0.473258332744286,2.54344310345736,7.87658724379480,4.38700713005133,-1.49950251870885,-4.21025867362045,-1.00233824192217};
-//        // f = {-16.2669614745437,4.54362949424187,3.73698472065357,1.30355753541773,3.44918920037055,-2.37395197855922,-2.22401498175641,-3.43725135840084};
-//        //f = {-0.484294567734286	0.676624087742047	1.59797165904310	1.97597515037871	0.319095109444789	-0.237879783226055	-0.703236632667890	-0.376471662697547};
-//        //f ={-5.19491074997163,12.1411370147787,4.51687508029188,23.7520169338784,18.1237823075420,-11.0794063241597,-12.0776863106043,-1.00933986344768};
-//        // case 30 fancy but without tunnel
-//        // this case contains contours with 8 vertices (8 edges)
-//        F = std::array<double, 8>{-11.2776683522162,4.34264464125961,2.20398713449477,4.94242873504933,5.56284709122434,-2.11044784460422,-10.3112450831516,-3.95693011723305};
-//        //f = {-28.0660802670280,11.5348985096636,0.661165156427608,9.24807607673638,3.37369161205236,-12.4710878273712,-16.1585752223895,-27.8037975287738};
-//    } else if (mc == 22) {
-//        // case 22, one surface with 9 edges
-//        F = std::array<double,8>{-15.6504952739285,2.90290077342601,24.5454566157887,-24.5274127623786,21.6741877710053,-4.49696327433901,-19.7891575872492,-15.5588482753161};
-//        //f = {-0.166648729499781,1.20496388280327,0.526942569080289,-0.655079098476782,1.37942900628002,-0.749151592823710,-0.451541598502498,-0.0848213779969326};
-//        //f = {-8.07458279195668,12.6860684502642,16.4371270364453,-28.2831095283080,12.5333231294999,-29.4925739940957,-9.04464846136196,-21.0339626770278};
-//        // case 22, other case with one surface  with 9 edges
-//        //f = {-0.107652770180584,1.92479616171011,0.0102684482681349,-0.775910464711502,1.63560644130687,-0.869694705363510,-0.0854358455109103,-0.400782649098897};
-//        // case 22 with tunnel
-//        //F = std::array<double,8>{-0.870292207640089,1.16040917473114,1.10072040367266,-0.145954798223727,1.70706223544379,-0.623055131485066,-0.351952380892271,-0.514249539867053};
-//        //f = {-8.50512808246324,2.25743809995132,1.15136722493571,-5.45696139315505,5.36214351039946,-5.72025480562082,-2.96855742891816,-7.83964259861431};
-//        // case 22 with 3 tunnels
-//        //F = std::array<double,8>{-3.42744283804455,0.621278122151001,4.48110777981235,-1.95551129669134,2.30448107596369,-1.04182240925489,-3.51087814405650,-6.44976786808517};
-//    } else if (mc == 60) {
-//        // case 60 with tunnel
-//        //F = std::array<double,8>{-0.100000000000000,-6.11000000000000,2,10.2000000000000,10.8000000000000,1.80000000000000,-8.20000000000000,-0.180000000000000};
-//        F = std::array<double,8>{9.9985934885536665,9.9998695572230147,9.9999045831713928,9.999316745478131,9.9986117521866866,9.9998754368055813,9.9999031760062458,9.9992041920402936};
-//    } else if (mc == 105) {
-//        // case 105 with tunnel
-//        //F = std::array<double,8>{2.74742516087490,-3.39187542578189,-12.5297639669456,0.431517989649243,-6.92460546400188,2.52228314017858,14.6950568276448,-10.0732624062474};
-//        //F = std::array<double,8>{9.62943583411392,-9.57067290101394,-15.7184912369771,1.63719021729391,-9.00821395927326,12.9838964358508,27.1294747489964,-11.3443003256802};
-//        // example of a countour with intersects twice but itself, and
-//        // therefore there is no tunnel, contour with 9 vertices/edges
-//        //F = std::array<double,8> {4.69314856679690,-25.6666841753773,-19.3439361061026,11.2891663083649,-5.72871085708909,12.8485897893816,14.4616618309557,-3.61934839891487};
-//        F = std::array<double,8> {893,1135,1115,971,1111,778,919,1046};
-//        //f = {2.56647391270132,-7.87546704094998,-24.0314386830922,0.877608326864389,-27.8666241843413,21.9109258856636,14.6592692141074,-17.3567518307032};
-//    } else if (mc == 24) {
-//        F = std::array<double,8>{-7.70146936482581,-3.21868369245987,-5.44023748418735,15.6051950593180,12.7611835388515,-4.46952393442309,-11.7240576326183,-9.23038948829007};
-//    } else if (mc == 25) {
-//        F = std::array<double,8>{9.9998593195995547,9.9993381282115549,9.9979160205452544,9.9986053863704142,9.9999374908631235,9.999424800002032,9.9983922749132219,9.999579324965488};
-//    }
-//
-//
-//    // apply rotation
-//    //    double rot1[] = {4,5,0,1,6,7,2,3};
-//    //    double rot2[] = {1,3,0,2,5,7,4,6};
-//    //    std::array<double, 8> rF(F);
-//    //    for (int i = 0; i < 8; i++){
-//    //        rF[i] = F[rot1[i]];
-//    //    }
-//    //    F = rF;
-//    //    // rotate again
-//    //    for (int i = 0; i < 8; i++) {
-//    //        rF[i] = F[rot2[i]];
-//    //    }
-//    //    F = rF;
-//
-//    // discretize cell and compute isosurfaces
-//    // init uniform grid
-//    std::array<Point,8> bb{Point{0,0,0},Point{1,0,0},Point{0,1,0},Point{1,1,0},Point{0,0,zmax},Point{1,0,zmax},Point{0,1,zmax},Point{1,1,zmax}};
-//    const int grsz = 50;
-//    m_ugrid.init(grsz,grsz,grsz,bb);
-//    double du = 1. / (grsz-1.);
-//    double dv = du;
-//    double dw = du;
-//
-//    double u = 0;
-//    for (int i = 0; i < grsz; i++) {
-//        double v = 0;
-//        for (int j = 0; j < grsz; j++) {
-//            double w = 0;
-//            for (int k = 0; k < grsz; k++) {
-//                const double val = m_ugrid.trilinear(u,v,w,F);
-//                m_ugrid.scalar(i, j, k, val);
-//                w += dw;
-//            }
-//            v += dv;
-//        }
-//        u += du;
-//    }
-//
-//    m_ugrid.gradient();
-//
-//    // set grid for tcm
-//    m_ugrid.init(2,2,2,bb);
-//    std::bitset<3> t_index;
-//    for (int i = 0; i < 2; i++) {
-//        t_index.set(0,i);
-//        for (int j = 0; j < 2; j++) {
-//            t_index.set(1,j);
-//            for (int k = 0; k < 2; k++) {
-//                t_index.set(2,k);
-//                m_ugrid.scalar(i, j, k, F[t_index.to_ullong()]);
-//            }
-//        }
-//    }
-//    m_ugrid.gradient();
-//
-//
-//    //double i0 = 9.99946; // case 60
-//    //double i0 = 9.9994608191478135; // case 145, i.e 25
-//    double i0 = 1000.;
-//    std::array<double, 8> sF = F;
-//    std::sort(sF.begin(),sF.end());
-//    double maxv = -std::numeric_limits<double>::max();
-//    double minv = -maxv;
-//    for (auto f : sF) {
-//        if (f < i0 && f > maxv) maxv = f;
-//        if (f > i0 && f < minv) minv = f;
-//    }
-//
-//    // compute isosurfaces
-//    int nIso = 1;
-//    // generate nIso colors
-//    std::vector<std::vector<float>> colors(10);
-//    double minC = 0;
-//    double maxC = 213;
-//    double dCol = (maxC - minC) / (nIso - 1.);
-//    double colV = minC;
-//    for (int col = 0; col < nIso; col++) {
-//        quitte::mesh::Vector<float,4> val{(float)colV,1,1,1};
-//        quitte::mesh::Vector<float,4> rgbC;
-//        rgbC = quitte::utils::hsv2rgb(val);
-//        colors[col].resize(3);
-//        colors[col][0] = rgbC[0];
-//        colors[col][1] = rgbC[1];
-//        colors[col][2] = rgbC[2];
-//        colV += dCol;
-//    }
-//    // set fields
-//    v.resize(nIso);
-//    n.resize(nIso);
-//    c.resize(nIso);
-//    e.resize(nIso);
-//    tv.resize(nIso);
-//    tn.resize(nIso);
-//    tc.resize(nIso);
-//    te.resize(nIso);
-//
-//    double di0 = (minv - maxv) / (nIso+1.);
-//    double isov = maxv + di0;
-//    for (int s = 0 ; s < nIso; s++) {
-//        if (s == 0)
-//            isov = 1000;
-//        iso_surface(isov);
-//        const int nr_v = (int)m_vertices.size();
-//        const int nr_t = (int)m_triangles.size();
-//        v[s].resize(3*nr_v);
-//        n[s].resize(3*nr_v);
-//        c[s].resize(3*nr_v);
-//        e[s].resize(3*nr_t);
-//        std::vector<int> t_nrv(nr_v,0);
-//        for (auto vt : m_vertices) {
-//            auto id = vt->i;
-//            if (id >= nr_v)
-//                std::cout << "ERROR: id: " << id << ", nr_v: " << nr_v << std::endl;
-//            v[s][3*id]     = (float)vt->p[0];
-//            v[s][3*id + 1] = (float)vt->p[1];
-//            v[s][3*id + 2] = (float)vt->p[2];
-//
-//            n[s][3*id]     = -(float)vt->n[0];
-//            n[s][3*id + 1] = -(float)vt->n[1];
-//            n[s][3*id + 2] = -(float)vt->n[2];
-//
-//            c[s][3*id]   = colors[s][0];
-//            c[s][3*id+1] = colors[s][1];
-//            c[s][3*id+2] = colors[s][2];
-//            t_nrv[id] += 1;
-//        }
-//        for (auto p : t_nrv) {
-//            if (p != 1)
-//                std::cout << "ERROR: wrong nr. of vertices\n";
-//        }
-//        int count = 0;
-//        for (auto t : m_triangles) {
-//            e[s][3*count]     = t.v[0];
-//            e[s][3*count + 1] = t.v[1];
-//            e[s][3*count + 2] = t.v[2];
-//            count++;
-//        }
-//
-//        // compute cell intersection
-//        t_mc(isov);
-//        const size_t nr_tv = m_tvertices.size();
-//        const size_t nr_tt = m_ttriangles.size();
-//        if (nr_tv > 0) {
-//            tv[s].resize(3*nr_tv);
-//            tn[s].resize(3*nr_tv);
-//            tc[s].resize(3*nr_tv);
-//            te[s].resize(3*nr_tt);
-//            for (auto vt : m_tvertices) {
-//                auto id = vt.g_idx;
-//                tv[s][3*id]     = (float)vt.p[0];
-//                tv[s][3*id + 1] = (float)vt.p[1];
-//                tv[s][3*id + 2] = (float)vt.p[2];
-//
-//                tn[s][3*id]     = -(float)vt.n[0];
-//                tn[s][3*id + 1] = -(float)vt.n[1];
-//                tn[s][3*id + 2] = -(float)vt.n[2];
-//
-//                tc[s][3*id]   = colors[s][0];
-//                tc[s][3*id+1] = colors[s][1];
-//                tc[s][3*id+2] = colors[s][2];
-//
-//            }
-//            count = 0;
-//            for (auto t : m_ttriangles) {
-//                te[s][3*count]     = t.v[0];
-//                te[s][3*count + 1] = t.v[1];
-//                te[s][3*count + 2] = t.v[2];
-//                count++;
-//            }
-//        }
-//
-//        // check if there are points
-//        size_t nr_pts = m_points.size();
-//        if (nr_pts > 0) {
-//            points.resize(3*nr_pts);
-//            pnorms.resize(3*nr_pts);
-//            int idx = 0;
-//            for (int i = 0; i < (int) m_points.size(); i++) {
-//                points[3*i]   = m_points[i][0];
-//                points[3*i+1] = m_points[i][1];
-//                points[3*i+2] = m_points[i][2];
-//                pnorms[3*i]   = m_pnorms[i][0];
-//                pnorms[3*i+1] = m_pnorms[i][1];
-//                pnorms[3*i+2] = m_pnorms[i][2];
-//                idx++;
-//            }
-//        }
-//        // update isovalue
-//        isov += di0;
-//
-//        // clear all values
-//        clear_all();
-//    }
-//
-//}
 
 
 void tmc::MarchingCubes::connectivity( )
@@ -2793,167 +2633,3 @@ void tmc::MarchingCubes::connectivity( )
 
 }
 
-
-
-//void
-//tmc::MarchingCubes::testData(int& nr_v,float** vertices,float** normals,int& nr_t,int** triangles, Mesh& mesh)
-//{
-//    std::cout << " ... create test data \n";
-//    // set grid sizes
-//    m_nx = 128;
-//    m_ny = 128;
-//    m_nz = 128;
-//
-//    // set domain
-//    std::array<Point, 8> bb;
-//    bb[0] = Point{0,0,0};
-//    bb[1] = Point{1,0,0};
-//    bb[2] = Point{0,1,0};
-//    bb[3] = Point{1,1,0};
-//    bb[4] = Point{0,0,1};
-//    bb[5] = Point{1,0,1};
-//    bb[6] = Point{0,1,1};
-//    bb[7] = Point{1,1,1};
-//
-//    m_ugrid.init(m_nx, m_ny, m_nz,bb);
-//    m_dx = m_ugrid.dx();
-//    m_dy = m_ugrid.dy();
-//    m_dz = m_ugrid.dz();
-//    // the test data set
-//    auto ft = [] (double x, double y, double z) {
-//        double alpha = 1.6;
-//        x = alpha * (2*x - 1);
-//        y = alpha * (2*y - 1);
-//        z = alpha * (2*z - 1);
-//        //        double c1[]{-1,0,0};
-//        //        double c2[]{ 1,0,0};
-//        //        double c3[]{1.8,1.8,1.8};
-//        //        double c4[]{-1.8,-1.8,-1.8};
-//        //        double val1 = (x-c1[0])*(x-c1[0]) + (y-c1[1])*(y-c1[1]) + (z-c1[2])*(z-c1[2]);
-//        //        double val2 = (x-c2[0])*(x-c2[0]) + (y-c2[1])*(y-c2[1]) + (z-c2[2])*(z-c2[2]);
-//        //        double val3 = (x-c3[0])*(x-c3[0]) + (y-c3[1])*(y-c3[1]) + (z-c3[2])*(z-c3[2]);
-//        //        double val4 = (x-c4[0])*(x-c4[0]) + (y-c4[1])*(y-c4[1]) + (z-c4[2])*(z-c4[2]);
-//        //        double beta = 5;
-//        //        return std::exp(-beta*val1) + std::exp(-beta*val2) + std::exp(-beta*val3) + std::exp(-beta*val4);
-//        return 2*y*(y*y - 3*x*x)*(1-z*z) + (x*x+y*y)*(x*x+y*y) - (9*z*z -1) * (1-z*z);
-//    };
-//
-//    int m_size = m_nx * m_ny * m_nz;
-//    int x_size = m_nx;
-//    int y_size = m_ny;
-//    int z_size = m_nz;
-//    auto g_index = [x_size,y_size,z_size]  (const int i, const int j, const int k) { return (k*y_size*x_size+j*x_size+i); };
-//    double z = bb[0][0];
-//    for (int k = 0; k < z_size; k++) {
-//        double y = bb[0][1];
-//        for (int j = 0; j < y_size; j++) {
-//            double x = bb[0][0];
-//            for (int i = 0; i < x_size; i++) {
-//                //const double val = ft(x,y,z);
-//                m_ugrid.scalar(g_index(i,j,k), ft(x,y,z));
-//                x = x + m_dx;
-//            }
-//            y = y + m_dy;
-//        }
-//        z = z + m_dz;
-//    }
-//
-//
-//    // compute gradient for normals
-//    m_ugrid.gradient();
-//    // invert gradient
-//    //m_ugrid.invert_normals();
-//
-//    // compute isosurface
-//    std::cout << " ... computing isosurface\n";
-//    const double i0 = 0.4;
-//    t_mc(i0);
-//
-//
-//    bool t_cm = true;
-//    std::cout << " ... copy data" << std::endl;
-//    timer.start();
-//    if (t_cm) {
-//        nr_v = (int)m_tvertices.size();
-//        nr_t = (int)m_ttriangles.size();
-//
-//        std::cout << "tot. nr. of triangles: " << nr_t << std::endl;
-//        std::cout << "tot. nr. of vertices:  " << nr_v << std::endl;
-//
-//        *vertices  = new float[4*nr_v];
-//        *normals   = new float[4*nr_v];
-//        *triangles = new int[4*nr_t];
-//        std::vector<int> t_vt(nr_v,0);
-//        // global vertex id in the triangle mesh was already set
-//        int vcount = 0;
-//        for (auto v : m_tvertices) {
-//            auto id = v.g_idx;
-//            (*vertices)[4*id]     = (float)v.p[0];
-//            (*vertices)[4*id + 1] = (float)v.p[1];
-//            (*vertices)[4*id + 2] = (float)v.p[2];
-//            (*vertices)[4*id + 3] = 1.0f;
-//            (*normals)[4*id]     = (float)v.n[0];
-//            (*normals)[4*id + 1] = (float)v.n[1];
-//            (*normals)[4*id + 2] = (float)v.n[2];
-//            (*normals)[4*id + 3] = 0.0f;
-//            vcount++;
-//            //t_vt[id]++;
-//        }
-//
-//        int count = 0;
-//        for (auto t : m_ttriangles) {
-//            (*triangles)[4*count]     = t.v[0];
-//            (*triangles)[4*count + 1] = t.v[1];
-//            (*triangles)[4*count + 2] = t.v[2];
-//            t_vt[t.v[0]] += 1;
-//            t_vt[t.v[1]] += 1;
-//            t_vt[t.v[2]] += 1;
-//            count++;
-//        }
-//        for (auto v : t_vt) {
-//            if (v == 0) {
-//                std::cout << "EXTREM ERROR!\n";
-//            }
-//        }
-//    } else {
-//        nr_v = (int)m_vertices.size();
-//        nr_t = (int)m_triangles.size();
-//        *vertices  = new float[4*nr_v];
-//        *normals   = new float[4*nr_v];
-//        *triangles = new int[4*nr_t];
-//        std::vector<int> t_vt(nr_v,0);
-//        // global vertex id in the triangle mesh was already set
-//        int vcount = 0;
-//        for (auto v : m_vertices) {
-//            auto id = v->i;
-//            (*vertices)[4*id]     = (float)v->p[0];
-//            (*vertices)[4*id + 1] = (float)v->p[1];
-//            (*vertices)[4*id + 2] = (float)v->p[2];
-//            (*vertices)[4*id + 3] = 1.0f;
-//            (*normals)[4*id]     = (float)v->n[0];
-//            (*normals)[4*id + 1] = (float)v->n[1];
-//            (*normals)[4*id + 2] = (float)v->n[2];
-//            (*normals)[4*id + 3] = 0.0f;
-//            vcount++;
-//            t_vt[id]++;
-//        }
-//        for (auto v : t_vt) {
-//            if (v != 1) {
-//                std::cout << "EXTREM ERROR!\n";
-//            }
-//        }
-//        int count = 0;
-//        for (auto t : m_triangles) {
-//            (*triangles)[4*count]     = t.v[0];
-//            (*triangles)[4*count + 1] = t.v[1];
-//            (*triangles)[4*count + 2] = t.v[2];
-//            count++;
-//        }
-//
-//    }
-//
-//    // create a halfedge mesh
-//    reconstruct(true, mesh);
-//    // analize mesh data
-//    topology(mesh);
-//}
