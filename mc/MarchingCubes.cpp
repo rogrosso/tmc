@@ -20,9 +20,9 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
 		exit(1);
 	}*/
 	std::FILE* f = fopen(i_file.c_str(), "rb");
-    short x_size;
-    short y_size;
-    short z_size;
+    ushort x_size;
+    ushort y_size;
+    ushort z_size;
     std::fread(&x_size, sizeof(ushort), 1, f);
     std::fread(&y_size, sizeof(ushort), 1, f);
     std::fread(&z_size, sizeof(ushort), 1, f);
@@ -73,7 +73,8 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
 
     // compute isosurface
     std::cout << " ... computing isosurface\n";
-	const double i0 = 700.01;
+	//const double i0 = 162.61;
+	const double i0 = 700.1;
     t_mc(i0);
 
 
@@ -85,8 +86,8 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
 
 
     // Check mesh topology and correct triangle orientation if necessary
-    std::cout << " ... check and correct triangle orientation\n";
-    connectivity();
+    //std::cout << " ... check and correct triangle orientation\n";
+    //connectivity();
 
 
     // write obj
@@ -101,7 +102,7 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const std::string& o_o
         objF << "vn " << std::setprecision(7) << std::fixed << m_pnorms[n][0] << " " << m_pnorms[n][1] << " " << m_pnorms[n][2] << std::endl;
     }
     for (auto t : m_triangles) {
-        objF << "f " << (t.v[0]+1) << " " << (t.v[1]+1) << " " << (t.v[2]+1) << std::endl;
+		objF << "f " << (t.v[0] + 1) << "//" << (t.v[0] + 1) << " " << (t.v[1] + 1) << "//" << (t.v[1] + 1) << " " << (t.v[2] + 1) << "//" << (t.v[1] + 1) << std::endl;
     }
     objF.close();
 
@@ -200,8 +201,8 @@ tmc::MarchingCubes::t_mc(const double i0)
                 int tcm = (int)t_ambig[i_case];
                 if (tcm == 105) {
                     i_case_count++;
-                    //t_slice(i,j,k,i0,u,p,n,i_case);
-                    p_slice(i,j,k,i0,u,p,n,i_case);
+                    t_slice(i,j,k,i0,u,p,n,i_case);
+                    //p_slice(i,j,k,i0,u,p,n,i_case);
                 } else {
                     // compute for this case the vertices
                     ushort flag = 1;
@@ -1272,16 +1273,20 @@ tmc::MarchingCubes::p_slice(const int i_index, const int j_index, const int k_in
 		double g1 = F[0] * (1 - ui[0]) + F[1] * ui[0];
 		double g2 = F[2] * (1 - ui[0]) + F[3] * ui[0];
 		vi[0] = (i0 - g1) / (g2 - g1);
+		if (std::isnan(vi[0]) || std::isinf(vi[0])) vi[0] = -1.f;
 		g1 = F[0] * (1 - ui[1]) + F[1] * ui[1];
 		g2 = F[2] * (1 - ui[1]) + F[3] * ui[1];
 		vi[1] = (i0 - g1) / (g2 - g1);
+		if (std::isnan(vi[1]) || std::isinf(vi[1])) vi[1] = -1.f;
 		// compute w-coordinates of solutions
 		g1 = F[0] * (1 - ui[0]) + F[1] * ui[0];
 		g2 = F[4] * (1 - ui[0]) + F[5] * ui[0];
 		wi[0] = (i0 - g1) / (g2 - g1);
+		if (std::isnan(wi[0]) || std::isinf(wi[0])) wi[0] = -1.f;
 		g1 = F[0] * (1 - ui[1]) + F[1] * ui[1];
 		g2 = F[4] * (1 - ui[1]) + F[5] * ui[1];
 		wi[1] = (i0 - g1) / (g2 - g1);
+		if (std::isnan(wi[1]) || std::isinf(wi[1])) wi[1] = -1.f;
 
 		// check solution intervals				
 		if (0 < ui[0] && ui[0] < 1) {
