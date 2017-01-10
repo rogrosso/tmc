@@ -54,6 +54,12 @@
 namespace tmc {
     /** Computes a topologically correct and manifolg isosurface
      *  from an uniform grid.
+	 *  # Volume data
+	 *  The implementation assumes the volume data is sotred in a uniform grid. The file containing the data
+	 *  should be a binary file with the following format:
+	 *  - three unsigned short indicating the dimensions in x, y and z
+	 *  - three floats with the cell sizes in x, y and z
+	 *  - the valume data as unsigned shorts. 
 	 *  # Element topology
 	 *  The numbering of vertices is given by vertex coordinates of a unit reference hexahedron. Edges
 	 *  are given by their end vertices. There are alos lists with the face-vertex and face-edge correspondences.
@@ -305,7 +311,16 @@ namespace tmc {
         using UGrid = UniformGrid;
 
     public:
-        void operator() (const std::string& file,const std::string& objF,const std::string& offF);
+		/**
+		 * This method reads the volume data, computes the isosurface and saves the result in an obj and off  files.
+		 * @param[in] i_file name of input file containing the volume data
+		 * @param[in] c_flag if true, the topology of the generated mesh will be checked for correctnes.
+		 * @param[in] obj_flag if true an obj file with the result will be written
+		 * @param[in] o_objF name of output obj file
+		 * @param[in] off_flag if true an off file containing the output mesh will be written
+		 * @param[in] o_offF name of output off file
+ 		 */
+        void operator() (const std::string& i_file, const bool c_flag, const bool obj_flag, const std::string& o_objF, const bool off_flag, const std::string& o_offF);
 
 
     private:
@@ -350,8 +365,6 @@ namespace tmc {
 	
         /// Implements the topologically correct and manifold marching cubes algorithm for the ugrid.
         void t_mc(const double i0);
-        /// Compute intersection of level set with ambiguous cell. A standard version.
-        void t_slice(const int i,const int j,const int k,const double i0,double* u,Point* p,Normal* n,const int i_case);
         /// Compute intersection of level set with ambiguous cell. Lookup geometry using bit patterns.
         void p_slice(const int i,const int j,const int k,const double i0,double* u,Point* p,Normal* n,const int i_case);
 		/// Implements the standard Marching Cubes algorithm with lookup tables changed to match element numbering.
