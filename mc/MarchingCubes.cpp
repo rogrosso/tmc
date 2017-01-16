@@ -9,7 +9,7 @@
 
 
 void
-tmc::MarchingCubes::operator() (const std::string& i_file,const bool c_flag, const bool obj_flag, const std::string& o_objF,const bool off_flag,const std::string& o_offF)
+tmc::MarchingCubes::operator() (const double i0, const std::string& i_file,const bool c_flag, const bool obj_flag, const std::string& o_objF,const bool off_flag,const std::string& o_offF)
 {
     std::cout << " ... reading data \n";
 
@@ -77,7 +77,7 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const bool c_flag, con
     std::cout << " ... computing isosurface\n";
 	//const double i0 = 162.61;
 	//const double i0 = 1003.4;
-	const double i0 = 1233.6;
+	//const double i0 = 1233.6;
     t_mc(i0);
 
 
@@ -121,7 +121,7 @@ tmc::MarchingCubes::operator() (const std::string& i_file,const bool c_flag, con
 
     // write obj output file
 	if (off_flag) {
-		std::cout << " ... write OFF file\n";
+		std::cout << " ... write OFF file: " << o_objF << std::endl;
 		std::ofstream offF;
 		offF.open(o_offF.c_str());
 		if (!offF.is_open()) {

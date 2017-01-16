@@ -17,8 +17,7 @@ int main(int argc, char* argv[])
 	std::string i_file = "";
 	std::string objF = "";
 	std::string offF = "";
-    mc(i_file,true,true,objF,true,offF);
+    const double i0 = 801.3;
+    mc(i0,i_file,true,true,objF,true,offF);
     return 0;
 }
-
-

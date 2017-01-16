@@ -313,6 +313,7 @@ namespace tmc {
     public:
 		/**
 		 * This method reads the volume data, computes the isosurface and saves the result in an obj and off  files.
+		 * @param[in] i0 iso-value
 		 * @param[in] i_file name of input file containing the volume data
 		 * @param[in] c_flag if true, the topology of the generated mesh will be checked for correctnes.
 		 * @param[in] obj_flag if true an obj file with the result will be written
@@ -320,7 +321,7 @@ namespace tmc {
 		 * @param[in] off_flag if true an off file containing the output mesh will be written
 		 * @param[in] o_offF name of output off file
  		 */
-        void operator() (const std::string& i_file, const bool c_flag, const bool obj_flag, const std::string& o_objF, const bool off_flag, const std::string& o_offF);
+        void operator() (const double i0,const std::string& i_file, const bool c_flag, const bool obj_flag, const std::string& o_objF, const bool off_flag, const std::string& o_offF);
 
 
     private:
