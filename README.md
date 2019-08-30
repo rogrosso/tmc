@@ -3,7 +3,7 @@
 **Construction of Topologically Correct and Manifold Iso-surfaces**
 Author: Roberto Grosso
 
-Different algorithms for computing topologically correct and manifold iso-surfaces from volume data (hexahedral meshes or voxel grids) were implemented. The output surfaces are represented using an indexed face set (shared vertex) and a halfedge data structure. 
+Different algorithms for computing topologically correct and manifold iso-surfaces from volume data (hexahedral meshes or voxel grids) were implemented. The output surfaces are represented using an indexed face set (shared vertex) and a halfedge data structure. The acronym **tmc** is intended to mean *topologically correct and manifold iso-surface extraction by using a Marching Cubes like algorithm*.
 
 ## Folder matlab
 
