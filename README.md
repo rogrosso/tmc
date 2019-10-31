@@ -43,4 +43,4 @@ This folder contains a CUDA implementation of the *Dual Marching Cubes* method p
 
 [2]: Roberto Grosso: **An asymptotic decider for robust and topologically correct triangulation of isosurfaces: topologically correct isosurfaces**. *CGI '17 Proceedings of the Computer Graphics International Conference*. Japan, June 2017
 
-[3]: Roberto Grosso, Daniel Zint: **PARALLEL RECONSTRUCTION OF QUAD ONLY MESHES FROM VOLUME DATA**. *Proceedings of the 28th International Meshing Roundtable*. Buffalo, NY, USA, October 2019.
+[3]: Roberto Grosso, Daniel Zint: **PARALLEL RECONSTRUCTION OF QUAD ONLY MESHES FROM VOLUME DATA**. *submitted*. 2019.
