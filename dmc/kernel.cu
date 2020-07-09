@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <array>
+#include <map>
 
 // project
 #include "Mesh.h"
@@ -11,27 +12,34 @@
 
 int main()
 {
-    using ushort = unsigned short;
-    p_dmc::DualMarchingCubes dmc;
-    p_dmc::Mesh mesh;
+    using SurfaceCase = p_mc::UniformGrid::SurfaceCase;
+    // Implicit Surfaces
+    //  GenusTwo = 4,
+    //  iWP = 5, (triple symmetry)
+    //  pwHybrid = 6,
+    //  neovius = 7,
+    //  Goursat = 8,
+    //  SteinerRoman = 9
+    std::map<std::string,int> config;
+    config["implicit"] = 5;
+    config["p3X3YColor"] = 1;
+    config["p3X3YOld"] = 1;
+    config["p3333"] = 1;
+    std::array<int, 3> dim{128,128,128};
+    p_mc::DualMarchingCubes dmc;
+    p_mc::Mesh mesh;
     
-    // Read volume data from file
-    //std::string i_file = "./head_ushort_512_512_641.bin";
-    //std::string o_file = "./head_ushort_512_512_641.obj";
-    //float i0 = 900; // iso-value
-    //dmc.readDataFromFile<ushort>(i_file);
-    // dmc.dualMC(i0, mesh);
-    
-    // generate synthetic volume
-    std::string o_file = "./synthetic.obj";
-    std::array<int, 3> dim{ 64, 64, 64 };
-    float i0 = 0;
-    dmc.generateData(dim);
+    // Init: generate a synthetic data set
+    std::cout << " ... init" << std::endl;
+    dmc.init(dim,static_cast<SurfaceCase>(7));
+    const float i0 = 0.0f;
 
     // compute iso-surface
-    dmc.dualMC(i0, mesh);
+    std::cout << " ... compute iso-surface" << std::endl;
+    dmc.dualMC(i0, mesh, config);
     // write mesh in obj file format
     std::cout << " ... writing obj\n";
+    std::string o_file{"dmc_mesh.obj"};
     // write triangle mesh
     //mesh.writeObjTriangles(o_file);
     // write quad mesh

@@ -9,7 +9,7 @@
 // project
 #include "Vector.h"
 
-namespace p_dmc {
+namespace p_mc {
 	class Mesh {
 	public:
 		typedef typename Vector Vertex;
@@ -49,23 +49,11 @@ namespace p_dmc {
 		{
 			m_vertices.push_back(v);
 			m_normals.push_back(n);
-			//const double r = 250.0 / 255.0;
-			//const double g = 235.0 / 255.0;
-			//const double b = 215.0 / 255.0;
-			//const double a = 1.0;
-            /*const double r = 235.0 / 255.0;
-            const double g = 235.0 / 255.0;
-            const double b = 235.0 / 255.0;
-            const double a = 1.0;*/
-            /*const double r = 175.0 / 255.0;
-            const double g = 170.0 / 255.0;
-            const double b = 170.0 / 255.0;
-            const double a = 1.0;*/
-            const double r = 250.0 / 255.0;
-            const double g = 250.0 / 255.0;
-            const double b = 250.0 / 255.0;
-            const double a = 1.0;
-			m_attributes.push_back({ r,g,b,a });
+			const double rC = 202.0 / 255.0;
+        	const double gC = 200.0 / 255.0;
+        	const double bC = 201.0 / 255.0;
+        	const double aC = 1.0;
+			m_attributes.push_back({ rC,gC,bC,aC });
 		}
 		void addVertex(Vertex& v, Normal& n, Attribute& a)
 		{

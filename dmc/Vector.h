@@ -4,7 +4,7 @@
 #include <iostream>
 #include <cmath>
 
-namespace p_dmc {
+namespace p_mc {
 	
 	struct Vector {
 		double p[3]{ 0,0,0 };
