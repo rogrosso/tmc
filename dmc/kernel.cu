@@ -22,9 +22,9 @@ int main()
     //  SteinerRoman = 9
     std::map<std::string,int> config;
     config["implicit"] = 5;
-    config["p3X3YColor"] = 1;
-    config["p3X3YOld"] = 1;
-    config["p3333"] = 1;
+    config["p3X3YColor"] = 1; // color based mesh simplification
+    config["p3X3YOld"] = 1;  // simplify isolated elements, i.e. no neighbor with same valence pattern
+    config["p3333"] = 1; // simplify vertex valence pattern 3333
     std::array<int, 3> dim{128,128,128};
     p_mc::DualMarchingCubes dmc;
     p_mc::Mesh mesh;
