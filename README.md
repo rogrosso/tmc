@@ -37,10 +37,15 @@ This folder contains a CUDA implementation of the topologically correct iso-surf
 
 ## Folder dmc
 
-This folder contains a CUDA implementation of the *Dual Marching Cubes* method presented in [3]. The main function demonstrates how to use the code. It can read volume data or alternatively generate a synthetic data set for demonstration purposes. The file format for volume data can be easily seen in the method `readDataFromFile()` implemented in the class `DualMarchingCubes`.
+This folder contains a CUDA implementation of the *Dual Marching Cubes* method presented in [3]. The main function demonstrates how to use the code. It can read volume data or alternatively generate a synthetic data set for demonstration purposes. The file format for volume data can be easily seen in the method `readDataFromFile()` implemented in the class `UniformGrid`. Data is generated or read from file with the corresponding `init()` method in the main class `DualMarchingCubes`.
 
 [1]: Roberto Grosso: **Construction of Topologically Correct and Manifold Isosurfaces**. *Computer Graphics Forum 35(5):187-196 · August 2016*
 
 [2]: Roberto Grosso: **An asymptotic decider for robust and topologically correct triangulation of isosurfaces: topologically correct isosurfaces**. *CGI '17 Proceedings of the Computer Graphics International Conference*. Japan, June 2017
 
-[3]: Roberto Grosso, Daniel Zint: **PARALLEL RECONSTRUCTION OF QUAD ONLY MESHES FROM VOLUME DATA**. *submitted*. 2019.
+[3]: Roberto Grosso, Daniel Zint: **Parallel reconstruction of quad only meshes
+from volume data**. In: *Proceedings of the 15th International Joint
+Conference on Computer Vision, Imaging and Computer Graphics
+Theory and Applications* - Volume 1: GRAPP,, pp. 102–112.
+INSTICC, SciTePress (2020).
+
