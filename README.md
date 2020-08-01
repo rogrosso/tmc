@@ -11,7 +11,7 @@ In this folder there are some few MATLAB scripts which computes the intersection
 
 ### Script t_mc_figs.m
 
-This script generates the figures presented in the paper [1]. Just open the MATLAB script and press run. It will generate a set of  MATLAB `*.fig` figures. 
+This script generates the figures presented in the paper [1]. Just open the MATLAB script and press run. It will generate a set of  MATLAB `*.fig` figures.
 
 ### Scripts t_mc_gui.m and t_mc.m
 
@@ -39,6 +39,10 @@ This folder contains a CUDA implementation of the topologically correct iso-surf
 
 This folder contains a CUDA implementation of the *Dual Marching Cubes* method presented in [3]. The main function demonstrates how to use the code. It can read volume data or alternatively generate a synthetic data set for demonstration purposes. The file format for volume data can be easily seen in the method `readDataFromFile()` implemented in the class `UniformGrid`. Data is generated or read from file with the corresponding `init()` method in the main class `DualMarchingCubes`.
 
+## Folder cpp_dmc
+
+This folder contains a C++ implementation of the *Dual Marching Cubes* method presented in [3]. The main function demonstrates how to use the code. It can read volume data or alternatively generate a synthetic data set for demonstration purposes. The class in charge of reading or generating a scalar field and save the data into a uniform grid is `Volumes`. The file format for volume data can be easily seen in the method `readDataFromFile()`. This class also implements different 3D scalar functions that can be used to synthetically generate iso-surfaces. Data generation, the computation of the DMC surface and the output into an `obj` file is carried out by the class `ImplicitSurface` by the method `dmc()`. The `main.c` file demonstrates how to use the code. This is a very first implementation in C++. Mesh simplification only removes elements with vertex valence pattern 3X3Y. The code can certainly be optimized. The simplification of elements with vertex valence pattern, which are not so common, will follows in a later version of the code.
+
 [1]: Roberto Grosso: **Construction of Topologically Correct and Manifold Isosurfaces**. *Computer Graphics Forum 35(5):187-196 · August 2016*
 
 [2]: Roberto Grosso: **An asymptotic decider for robust and topologically correct triangulation of isosurfaces: topologically correct isosurfaces**. *CGI '17 Proceedings of the Computer Graphics International Conference*. Japan, June 2017
@@ -48,4 +52,3 @@ from volume data**. In: *Proceedings of the 15th International Joint
 Conference on Computer Vision, Imaging and Computer Graphics
 Theory and Applications* - Volume 1: GRAPP,, pp. 102–112.
 INSTICC, SciTePress (2020).
-
