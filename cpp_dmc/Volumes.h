@@ -130,86 +130,6 @@ namespace cpp_mc {
 		{
 			return x * x + y * y + z * z;
 		}
-		template<>
-		double surface<Surface::Sphere>(const double x, const double y, const double z)
-		{
-			return x * x + y * y + z * z;
-		}
-		template<>
-		double surface<Surface::Torus>(const double x, const double y, const double z)
-		{
-			const double R = 0.6 * 0.6;
-			const double r = 0.3 * 0.3;
-			double val = (x * x + y * y + z * z + R - r);
-			val = val * val;
-			val = val - 4 * R * (x * x + y * y);
-			return val;
-		}
-		template<>
-		double surface<Surface::TwoHoledTorus>(const double x, const double y, const double z)
-		{
-			// center one torus at (-1/2,0,0), the other at (1/2,0,0)
-			const double R = square(0.4);
-			const double r = square(0.2);
-			const double x1 = x + 0.4;
-			const double x2 = x - 0.4;
-			double val1 = square((square(x1) + square(y) + square(z) + R - r));
-			val1 = val1 - 4 * R * (square(x1) + square(y));
-			double val2 = square((square(x2) + square(y) + square(z) + R - r));
-			val2 = val2 - 4 * R * (square(x2) + square(y));
-			return std::min(val1, val2);
-		}
-		template<>
-		double surface<Surface::MonkeySaddle>(const double x_, const double y_, const double z_)
-		{
-			const double alpha = 0.5;
-			const double x = alpha * x_;
-			const double y = alpha * y_;
-			const double z = alpha * z_;
-			return z - x * x * x - 3 * x * y * y;
-		}
-		template<>
-		double surface<Surface::GenusTwo>(const double x_, const double y_, const double z_)
-		{
-			double alpha = 1.0;
-			double x = (x_ + 1.0) / 2.0;
-			double y = (y_ + 1.0) / 2.0;
-			double z = (z_ + 1.0) / 2.0;
-			x = alpha * (4 * x - 2);
-			y = alpha * (4 * y - 2);
-			z = alpha * (4 * z - 2);
-			double val = 2 * y * (y * y - 3 * x * x) * (1 - z * z) + (x * x + y * y) * (x * x + y * y) - (9 * z * z - 1) * (1 - z * z);
-			return val;
-		}
-		template<>
-		double surface<Surface::iWP>(const double x_, const double y_, const double z_)
-		{
-			const float alpha = 5.01;
-			//const float alpha = 1.01;
-			const float x = alpha * (x_ + 1) * pi;
-			const float y = alpha * (y_ + 1) * pi;
-			const float z = alpha * (z_ + 1) * pi;
-			return cos(x) * cos(y) + cos(y) * cos(z) + cos(z) * cos(x) - cos(x) * cos(y) * cos(z); // iso-value = 0
-		}
-		template<>
-		double surface<Surface::Neovius>(const double x_, const double y_, const double z_)
-		{
-			const float alpha = 1;
-			const float x = alpha * (x_ + 1) * pi;
-			const float y = alpha * (y_ + 1) * pi;
-			const float z = alpha * (z_ + 1) * pi;
-			return 3 * (cos(x) + cos(y) + cos(z)) + 4 * cos(x) * cos(y) * cos(z); // iso_value = 0.0
-		}
-		template<>
-		double surface<Surface::SternerRoman>(const double x_, const double y_, const double z_)
-		{
-			const float alpha = 1.5f;
-			const float x = alpha * x_;
-			const float y = alpha * y_;
-			const float z = alpha * z_;
-			auto sq = [](const double v) { return v * v;  };
-			return sq(x * x + y * y + z * z - 1.0f) - (sq(z - 1) - 2.0f * x * x) * (sq(z + 1) - 2 * y * y);
-		}
 
 	private:
 		void initUGrid(UGrid& ugrid, const int nx, const int ny, const int nz)
@@ -228,4 +148,86 @@ namespace cpp_mc {
 		double square(const double x) { return x * x; }
 		double pi{ 3.14159265358979323846 };
 	};
-} // namespace homotopy
+
+    template<>
+    double Volumes::surface<Volumes::Surface::Sphere>(const double x, const double y, const double z)
+    {
+        return x * x + y * y + z * z;
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::Torus>(const double x, const double y, const double z)
+    {
+        const double R = 0.6 * 0.6;
+        const double r = 0.3 * 0.3;
+        double val = (x * x + y * y + z * z + R - r);
+        val = val * val;
+        val = val - 4 * R * (x * x + y * y);
+        return val;
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::TwoHoledTorus>(const double x, const double y, const double z)
+    {
+        // center one torus at (-1/2,0,0), the other at (1/2,0,0)
+        const double R = square(0.4);
+        const double r = square(0.2);
+        const double x1 = x + 0.4;
+        const double x2 = x - 0.4;
+        double val1 = square((square(x1) + square(y) + square(z) + R - r));
+        val1 = val1 - 4 * R * (square(x1) + square(y));
+        double val2 = square((square(x2) + square(y) + square(z) + R - r));
+        val2 = val2 - 4 * R * (square(x2) + square(y));
+        return std::min(val1, val2);
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::MonkeySaddle>(const double x_, const double y_, const double z_)
+    {
+        const double alpha = 0.5;
+        const double x = alpha * x_;
+        const double y = alpha * y_;
+        const double z = alpha * z_;
+        return z - x * x * x - 3 * x * y * y;
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::GenusTwo>(const double x_, const double y_, const double z_)
+    {
+        double alpha = 1.0;
+        double x = (x_ + 1.0) / 2.0;
+        double y = (y_ + 1.0) / 2.0;
+        double z = (z_ + 1.0) / 2.0;
+        x = alpha * (4 * x - 2);
+        y = alpha * (4 * y - 2);
+        z = alpha * (4 * z - 2);
+        double val = 2 * y * (y * y - 3 * x * x) * (1 - z * z) + (x * x + y * y) * (x * x + y * y) - (9 * z * z - 1) * (1 - z * z);
+        return val;
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::iWP>(const double x_, const double y_, const double z_)
+    {
+        const float alpha = 5.01;
+        //const float alpha = 1.01;
+        const float x = alpha * (x_ + 1) * pi;
+        const float y = alpha * (y_ + 1) * pi;
+        const float z = alpha * (z_ + 1) * pi;
+        return cos(x) * cos(y) + cos(y) * cos(z) + cos(z) * cos(x) - cos(x) * cos(y) * cos(z); // iso-value = 0
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::Neovius>(const double x_, const double y_, const double z_)
+    {
+        const float alpha = 1;
+        const float x = alpha * (x_ + 1) * pi;
+        const float y = alpha * (y_ + 1) * pi;
+        const float z = alpha * (z_ + 1) * pi;
+        return 3 * (cos(x) + cos(y) + cos(z)) + 4 * cos(x) * cos(y) * cos(z); // iso_value = 0.0
+    }
+    template<>
+    double Volumes::surface<Volumes::Surface::SternerRoman>(const double x_, const double y_, const double z_)
+    {
+        const float alpha = 1.5f;
+        const float x = alpha * x_;
+        const float y = alpha * y_;
+        const float z = alpha * z_;
+        auto sq = [](const double v) { return v * v;  };
+        return sq(x * x + y * y + z * z - 1.0f) - (sq(z - 1) - 2.0f * x * x) * (sq(z + 1) - 2 * y * y);
+    }
+
+} // namespace cpp_mc
