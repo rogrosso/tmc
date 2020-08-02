@@ -40,7 +40,8 @@ namespace cpp_mc {
 			m_ny = 256;
 			m_nz = 256;
             // choose one surface case
-			m_volumes.scalar<Volumes::Surface::GenusTwo>(m_ugrid, m_nx, m_ny, m_nz);
+			//m_volumes.scalar<Volumes::Surface::GenusTwo>(m_ugrid, m_nx, m_ny, m_nz);
+            m_volumes.scalar<Surface::GenusTwo>(m_ugrid, m_nx, m_ny, m_nz);
             //m_volumes.scalar<Volumes::Surface::iWP>(m_ugrid, m_nx, m_ny, m_nz);
             //m_volumes.scalar<Volumes::Surface::SternerRoman>(m_ugrid, m_nx, m_ny, m_nz);
             //m_volumes.scalar<Volumes::Surface::SternerRoman>(m_ugrid, m_nx, m_ny, m_nz);

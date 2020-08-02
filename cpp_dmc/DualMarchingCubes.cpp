@@ -91,7 +91,7 @@ void cpp_mc::DualMarchingCubes::slice(const double i0, const uint i_case, const 
 	const unsigned char l_edges_[12]{ 16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98 };
 	ushort e_{ 0 };
 	// compute vertex representative for each mc polygon
-	for (int t = 0; t < cnt_; t++)
+	for (uint t = 0; t < cnt_; t++)
 	{
 		Vertex ei;
 		const int cnt_size = get_cnt_size(t, c_);
