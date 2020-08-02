@@ -10,12 +10,19 @@
 
 namespace cpp_mc {
 	/**
+     * Remark on constructing surfaces from many scalar functions
+     * using boolean operations
 	 * Use boolean operation to construct implicite surfaces
 	 * Given two sets A, B
 	 * F(intersection(A,B)) = MAX(A,B)
 	 * F(union(A,B)) = MIN(A,B)
 	 * F(subtraction(A,B)) = MAX(A,-B)
 	 */
+
+     /**
+      * Computes a uniform grid from a 3D scalar function or read
+      * a scalar function into the unifrom grid from a binary file.
+      */
 	class Volumes {
 	public:
 		using uchar = unsigned char;
@@ -207,8 +214,7 @@ namespace cpp_mc {
 			const float x = alpha * x_;
 			const float y = alpha * y_;
 			const float z = alpha * z_;
-			auto sq = [](const double v) { return v * v;  };
-			return sq(x * x + y * y + z * z - 1.0f) - (sq(z - 1) - 2.0f * x * x) * (sq(z + 1) - 2 * y * y);
+			return square(x * x + y * y + z * z - 1.0f) - (square(z - 1) - 2.0f * x * x) * (square(z + 1) - 2 * y * y);
 		}
 
 	private:

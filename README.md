@@ -42,6 +42,8 @@ This folder contains a CUDA implementation of the *Dual Marching Cubes* method p
 ## Folder cpp_dmc
 
 This folder contains a C++ implementation of the *Dual Marching Cubes* method presented in [3]. The main function demonstrates how to use the code. It can read volume data or alternatively generate a synthetic data set for demonstration purposes. The class in charge of reading or generating a scalar field and save the data into a uniform grid is `Volumes`. The file format for volume data can be easily seen in the method `readDataFromFile()`. This class also implements different 3D scalar functions that can be used to synthetically generate iso-surfaces. Data generation, the computation of the DMC surface and the output into an `obj` file is carried out by the class `ImplicitSurface` by the method `dmc()`. The `main.c` file demonstrates how to use the code. This is a very first implementation in C++. Mesh simplification only removes elements with vertex valence pattern 3X3Y. The code can certainly be optimized. The simplification of elements with vertex valence pattern, which are not so common, will follows in a later version of the code.
+### Remark
+I have compiled the code in the Ubuntu 20.04 LTS terminal in Windows 10 and the clang version 10.0.0-4. The simplest command line for compiling is `clang++ -o dmc -std=c++17 -W *.cpp`. Under this restrictions the code compiles with one warning. The code was developed with `Visual Studio 2019 community`. It is required to set the `C++ Language Standard`  to `ISO C++ 17 Standard`.
 
 [1]: Roberto Grosso: **Construction of Topologically Correct and Manifold Isosurfaces**. *Computer Graphics Forum 35(5):187-196 · August 2016*
 
