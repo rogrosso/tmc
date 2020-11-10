@@ -201,7 +201,7 @@ namespace p_mc {
                     break;
                 case 9:
                 {
-                    const double val = asymptotic_decider(f0, f1, f2, f3);
+                    const float val = asymptotic_decider(f0, f1, f2, f3);
                     if (val >= i0) {
                         set_segm(e0, e1, segm_);
                         set_segm(e2, e3, segm_);
@@ -409,7 +409,7 @@ namespace p_mc {
         __device__ void levelsetIntersection(const float i0, const int i, const int j, const int k, UGrid& ugrid, float f[8], float3 n[8], float3& p, float3& n_)
         {
             const int max_iter = 20;
-            const double step = 0.05;
+            const float step = 0.05;
             float3 grad;
             float u1, v1, w1;
             u1 = (p.x - ugrid.x0 - i * ugrid.dx) / ugrid.dx;
@@ -527,14 +527,14 @@ namespace p_mc {
                 // compute normal at mesh vertex
                 float3 ni = trilinear(n, ei.x, ei.y, ei.z);
                 normalize(ni);
-                
+
                 // compute point in space (voxel grid)
                 ei.x = ugrid.x0 + (i_index + ei.x) * ugrid.dx;
                 ei.y = ugrid.y0 + (j_index + ei.y) * ugrid.dy;
                 ei.z = ugrid.z0 + (k_index + ei.z) * ugrid.dz;
 
                 const int v_addr = v_.addVertex(ei, ni);
-                
+
                 // for all this edges save the vertex
                 for (int i = 0; i < cnt_size; i++)
                 {
@@ -739,7 +739,14 @@ namespace p_mc {
             }
             return (error.x > 0);
         }
-        __device__ void movePointToSurface(const float f[8], const float i0, float3& u)
+        /// Move point to surface based on gradient of scalar field
+        /// @param [in] f values of scalar field at cell Vertices
+        /// @param [in] i0 iso-values
+        /// @param [in/out] starting position of cell representative, at end of
+        ///                 iteration contains the point on the trilinear surface
+        /// This is the original method proposed in the first version of the paper
+        /// This method does not hit the surface under certain conditions.
+        __device__ void movePointToSurfaceOld(const float f[8], const float i0, float3& u)
         {
             const int max_iter = 20;
             float u1 = u.x, v1 = u.y, w1 = u.z;
@@ -781,6 +788,85 @@ namespace p_mc {
                 val1 = val2;
             }
         }
+        /// <summary>
+        /// Move point to surface using the gradient of the scalar field
+        /// to set direction.
+        /// </summary>
+        /// <param name="f">scalar values at cell vertices</param>
+        /// <param name="i0">iso-value</param>
+        /// <param name="u">position of point, being moving to trilinear surface</param>
+        /// <returns></returns>
+        __device__ void movePointToSurface(const float f[8], const float i0, float3& u)
+        {
+            const int max_iter = 30;
+            float u1 = u.x, v1 = u.y, w1 = u.z;
+            float val1 = trilinear(f, u1, v1, w1), val2;
+            for (int iter = 0; iter < max_iter; iter++)
+            {
+                float3 grad = gradient(f, u1, v1, w1);
+                if (val1 > i0)
+                {
+                    // invert gradient
+                    grad.x = -grad.x;
+                    grad.y = -grad.y;
+                    grad.z = -grad.z;
+                }
+                // normalize
+                normalize(grad);
+                const float step = 0.05f;
+                float u2 = u1 + step * grad.x;
+                float v2 = v1 + step * grad.y;
+                float w2 = w1 + step * grad.z;
+
+                // check if we are within the cell
+                int c = clampDim(u2, v2, w2);
+                val2 = trilinear(f, u2, v2, w2);
+                if ((val1 <= i0 && i0 <= val2) || (val2 <= i0 && i0 <= val1))
+                {
+                    float e = val1;
+                    if (val1 != val2)
+                        e = (i0 - val1) / (val2 - val1);
+                    u.x = u1 + e * (u2 - u1);
+                    u.y = v1 + e * (v2 - v1);
+                    u.z = w1 + e * (w2 - w1);
+                    break;
+                }
+
+                if (c != -1) {
+                    if (c == 0) {
+                        grad.x = 0;
+                    }
+                    else if (c == 1) {
+                        grad.y = 0;
+                    }
+                    else if (c == 2) {
+                        grad.z = 0;
+                    }
+                    normalize(grad);
+                    u2 = u1 + step * grad.x;
+                    v2 = v1 + step * grad.y;
+                    w2 = w1 + step * grad.z;
+                    clampDim(u2, v2, w2);
+
+                    val2 = trilinear(f, u2, v2, w2);
+                    if ((val1 <= i0 && i0 <= val2) || (val2 <= i0 && i0 <= val1))
+                    {
+                        float e = val1;
+                        if (val1 != val2)
+                            e = (i0 - val1) / (val2 - val1);
+                        u.x = u1 + e * (u2 - u1);
+                        u.y = v1 + e * (v2 - v1);
+                        u.z = w1 + e * (w2 - w1);
+                        break;
+                    }
+                }
+                // update
+                u1 = u2;
+                v1 = v2;
+                w1 = w2;
+                val1 = val2;
+            }
+        }
         /// trilinear interpolation of scalar
         __device__ float trilinear(const float f[8], const float u, const float v, const float w)
         {
@@ -789,7 +875,7 @@ namespace p_mc {
         /// <summary>Trilinar Interpolation of a vector</summary>
         /// <param name="p">Points at the vertices</param>
         /// <param name="u">local coordinate</param>
-        /// <param name="v">local coordinate</param> 
+        /// <param name="v">local coordinate</param>
         /// <param name="w">local coordinate</param>
         /// <returns></returns>
         __device__ float3 trilinear(const float3 p[8], const float u, const float v, const float w)
@@ -841,6 +927,30 @@ namespace p_mc {
             (w <= 0 ? (w = 0, flag = true) : w <= 1 ? w : (w = 1, flag = true));
             return flag;
         }
+        /// <summary>
+        /// Clamp local coordinates to unit cube and returns
+        /// the dimension being clumped.
+        /// </summary>
+        /// <param name="u"></param>
+        /// <param name="v"></param>
+        /// <param name="w"></param>
+        /// <returns>true is coordinated clamped</returns>
+        __device__ int clampDim(float& u, float& v, float& w) {
+            int flag{ -1 };
+            (u <= 0 ? (u = 0, flag = 0) : u <= 1 ? u : (u = 1, flag = 0));
+            (v <= 0 ? (v = 0, flag = 1) : v <= 1 ? v : (v = 1, flag = 1));
+            (w <= 0 ? (w = 0, flag = 2) : w <= 1 ? w : (w = 1, flag = 2));
+            return flag;
+        }
+        /// <summary>
+        /// Compute and return local coordinates of input point u with respect to edge
+        /// </summary>
+        /// <param name="l_edge">encode vertices ids of edge</param>
+        /// <param name="e">edge being processed</param>
+        /// <param name="f">scalar values at cell vertices</param>
+        /// <param name="i0">iso-value</param>
+        /// <param name="u">local coordinates being accumulated</param>
+        /// <returns></returns>
         __device__ float3 getLocalCoordinates(const unsigned char l_edge, const int e, const float f[8], const float i0, float3& u)
         {
             const int v0 = (l_edge & 0xF);

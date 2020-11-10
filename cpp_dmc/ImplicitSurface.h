@@ -41,10 +41,10 @@ namespace cpp_mc {
 			m_nz = 256;
             // choose one surface case
 			//m_volumes.scalar<Surface::GenusTwo>(m_ugrid, m_nx, m_ny, m_nz);
-            //m_volumes.scalar<Surface::iWP>(m_ugrid, m_nx, m_ny, m_nz);
+            m_volumes.scalar<Surface::iWP>(m_ugrid, m_nx, m_ny, m_nz);
             //m_volumes.scalar<Surface::MonkeySaddle>(m_ugrid, m_nx, m_ny, m_nz);
             //m_volumes.scalar<Surface::SternerRoman>(m_ugrid, m_nx, m_ny, m_nz);
-            m_volumes.scalar<Surface::Neovius>(m_ugrid, m_nx, m_ny, m_nz);
+            //m_volumes.scalar<Surface::Neovius>(m_ugrid, m_nx, m_ny, m_nz);
             // set the iso-value to be zero
 			i0 = 0.0;
             // start computation

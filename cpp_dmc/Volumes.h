@@ -80,7 +80,7 @@ namespace cpp_mc {
      double surface<Surface::iWP>(const double x_, const double y_, const double z_)
      {
          double pi{ 3.14159265358979323846 };
-         const float alpha = 5.01;
+         const float alpha = 1.01;
          //const float alpha = 1.01;
          const float x = alpha * (x_ + 1) * pi;
          const float y = alpha * (y_ + 1) * pi;
