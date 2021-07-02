@@ -1,7 +1,7 @@
 #pragma once
 #include <chrono>
 
-namespace cpp_mc {
+namespace dmc {
 
 	class Timer
 	{

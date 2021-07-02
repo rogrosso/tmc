@@ -4,7 +4,7 @@
 #include <iostream>
 #include <cmath>
 
-namespace cpp_mc {
+namespace dmc {
 
 	struct Vector {
 		double p[3]{ 0,0,0 };
@@ -162,23 +162,23 @@ namespace cpp_mc {
 
 
 	// helper functions
-	inline double distance(const Vector p1, const Vector p2) {
+	inline double distance(const Vector& p1, const Vector& p2) {
 		double d = (p1[0] - p2[0])*(p1[0] - p2[0]) + (p1[1] - p2[1])*(p1[1] - p2[1]) + (p1[2] - p2[2])*(p1[2] - p2[2]);
 		return std::sqrt(d);
 	}
-	inline double norm(const Vector v) {
+	inline double norm(const Vector& v) {
 		return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 	}
-	inline void normalize(Vector v) {
+	inline void normalize(Vector& v) {
 		double s_ = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 		v[0] /= s_;
 		v[1] /= s_;
 		v[2] /= s_;
 	}
-	inline double dot(const Vector v1, const Vector v2) {
+	inline double dot(const Vector& v1, const Vector& v2) {
 		return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
 	}
-	inline Vector cross(const Vector v1, const Vector v2) {
+	inline Vector cross(const Vector& v1, const Vector& v2) {
 		Vector nv{ v1[1] * v2[2] - v1[2] * v2[1], v1[2] * v2[0] - v1[0] * v2[2], v1[0] * v2[1] - v1[1] * v2[0] };
 		return nv;
 	}

@@ -1,13 +1,13 @@
 
 #include "Timer.h"
 
-cpp_mc::Timer::Timer()
+dmc::Timer::Timer()
 {
 	start = std::chrono::high_resolution_clock::now();
 	stop = std::chrono::high_resolution_clock::now();
 }
 
-double cpp_mc::Timer::GetMilisecondsElapsed()
+double dmc::Timer::GetMilisecondsElapsed()
 {
 	if (isrunning)
 	{
@@ -21,13 +21,13 @@ double cpp_mc::Timer::GetMilisecondsElapsed()
 	}
 }
 
-void cpp_mc::Timer::Restart()
+void dmc::Timer::Restart()
 {
 	isrunning = true;
 	start = std::chrono::high_resolution_clock::now();
 }
 
-bool cpp_mc::Timer::Stop()
+bool dmc::Timer::Stop()
 {
 	if (!isrunning)
 		return false;
@@ -39,7 +39,7 @@ bool cpp_mc::Timer::Stop()
 	}
 }
 
-bool cpp_mc::Timer::Start()
+bool dmc::Timer::Start()
 {
 	if (isrunning)
 	{

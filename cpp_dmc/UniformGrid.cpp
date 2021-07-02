@@ -1,6 +1,6 @@
 #include "UniformGrid.h"
 
-void cpp_mc::UniformGrid::init(const std::string& filename)
+void dmc::UniformGrid::init(const std::string& filename)
 {
 	std::ifstream ifile;
 	ifile.open(filename, std::ios::binary);
@@ -45,7 +45,7 @@ void cpp_mc::UniformGrid::init(const std::string& filename)
 	flip_gradient();
 }
 
-void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz)
+void dmc::UniformGrid::init(const int nx, const int ny, const int nz)
 {
 	// set grid size
 	m_nx = nx;
@@ -78,7 +78,7 @@ void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz)
 	}
 }
 
-void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & bb)
+void dmc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & bb)
 {
 	// set grid size
 	m_nx = nx;
@@ -115,7 +115,7 @@ void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & 
 	m_dz = z_space / (static_cast<double>(m_nz) - 1.0);
 }
 
-void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & bb, const double val)
+void dmc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & bb, const double val)
 {
 	// set grid size
 	m_nx = nx;
@@ -153,15 +153,16 @@ void cpp_mc::UniformGrid::init(const int nx, const int ny, const int nz, BBox & 
 }
 
 
-void cpp_mc::UniformGrid::estimateGradient()
+void dmc::UniformGrid::estimateGradient()
 {
 	auto index = [](const int i, const int max)
 	{
 		return (i < 0) ? 0 : (i >= max) ? max - i : i;
 	};
 	m_gradient.resize(m_scalars.size());
+	const int nr = static_cast<int>(m_scalars.size());
 #pragma omp parallel for
-	for (int s = 0; s < static_cast<int>(m_scalars.size()); s++) {
+	for (int s = 0; s < nr; s++) {
 		Index idx = local_index(s);
 		const int i = idx[0];
 		const int i0 = index(i - 1, m_nx);
@@ -182,11 +183,12 @@ void cpp_mc::UniformGrid::estimateGradient()
 	}
 }
 
-void cpp_mc::UniformGrid::flip_gradient()
+void dmc::UniformGrid::flip_gradient()
 {
 	const double s = -1.;
+	const int nr = static_cast<int>(m_gradient.size());
 #pragma omp parallel for
-	for (int i = 0; i < static_cast<int>(m_gradient.size()); i++)
+	for (int i = 0; i < nr; i++)
 	{
 		m_gradient[i][0] *= s;
 		m_gradient[i][1] *= s;

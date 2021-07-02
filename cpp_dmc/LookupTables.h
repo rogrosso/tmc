@@ -1,7 +1,7 @@
 #pragma once
 
 
-namespace cpp_mc {
+namespace dmc {
 	//const int EDGE_00 = 1;
 	//const int EDGE_01 = 2;
 	//const int EDGE_02 = 4;

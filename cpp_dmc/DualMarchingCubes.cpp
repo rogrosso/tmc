@@ -2,9 +2,10 @@
 #include "LookupTables.h"
 
 
-void cpp_mc::DualMarchingCubes::dual_mc(const double i0, UGrid& ugrid,
+void dmc::DualMarchingCubes::dualMC(const double i0, UGrid& ugrid,
 	std::vector<Vertex>& v, std::vector<Normal>& n,
-	std::vector<int>& tris, std::vector<int>& quads)
+	std::vector<int>& tris, std::vector<int>& quads,
+    const bool sFlag)
 {
 	// collect information about the uniform grid
 	const int idim = ugrid.x_size();
@@ -12,6 +13,7 @@ void cpp_mc::DualMarchingCubes::dual_mc(const double i0, UGrid& ugrid,
 	const int kdim = ugrid.z_size();
 	std::map<int, std::array<int, 5>> m_;
     std::cout << " ... compute iso-surface" << std::endl;
+#pragma omp parallel for
     for (int k = 0; k < (kdim - 1); k++)
 	{
 		for (int j = 0; j < (jdim - 1); j++)
@@ -46,141 +48,291 @@ void cpp_mc::DualMarchingCubes::dual_mc(const double i0, UGrid& ugrid,
 			}
 		}
 	}
-
-	// collect quadrilaterals
+    std::cout << " ... projections failed level 1: " << nrProj1 << std::endl;
+    std::cout << " ... projections failed level 2: " << nrProj2 << std::endl;
+    // collect quadrilaterals
     std::vector<int> colors;
     std::cout << " ... collect quadrilaterals" << std::endl;
 	collectQuadrilaterals(quads, colors, m_);
-    // simplify 3X3Y
-    std::cout << " ... mesh simplification" << std::endl;
-    simplify3X3Y(v, n, quads, colors);
+    // remove unused vertices, e.g. at boundaries
+    removeUnusedVertices(v, n, quads);
+    // count elements
+    std::cout << " ... nr. of vertices: " << v.size() << std::endl;
+    std::cout << " ... nr. of quads: " << (quads.size() / 4) << std::endl;
+    if (sFlag)
+    {
+        // simplify 3X3Y
+        std::cout << " ... mesh simplification - P3X3Y" << std::endl;
+        simplify3X3Y(v, n, quads, colors);
+        // count elements
+        std::cout << " ... nr. of vertices: " << v.size() << std::endl;
+        std::cout << " ... nr. of quads: " << (quads.size() / 4) << std::endl;
+        // simplify 3333
+        std::cout << " ... mesh simplification - P3333" << std::endl;
+        simplify3333(v, n, quads);
+        // count elements
+        std::cout << " ... nr. of vertices: " << v.size() << std::endl;
+        std::cout << " ... nr. of quads: " << (quads.size() / 4) << std::endl;
+    }
+    // compute final halfedge data structure and find out nr. of non-manifold elements
+    std::cout << " ... compute halfedges" << std::endl;
+    const int nr_v{ static_cast<int>(v.size()) };
+    std::vector<std::array<int, 5>> he_; // mark manifold and non-manifold halfedges
+    std::vector<int> v_;
+    std::vector<int> f_;
+    halfedges(nr_v, quads, he_, v_, f_);
 	// compute triangles
     std::cout << " ... compute triangles" << std::endl;
 	collectTriangles(tris, quads, v);
+    std::cout << " ... done!" << std::endl;
 }
 
-void cpp_mc::DualMarchingCubes::slice(const double i0, const uint i_case, const int i_index, const int j_index, const int k_index,
-	double f[8], UGrid& ugrid, std::vector<Vertex>& v, std::vector<Normal>& n, std::map<int, std::array<int, 5>>& m_)
+
+//=====================================================================================================================
+//=====================================================================================================================
+//  Compute intersection of iso-surface with a cell
+//
+//=====================================================================================================================
+//=====================================================================================================================
+void dmc::DualMarchingCubes::slice(const double i0, const uint i_case, const int i_index, const int j_index, const int k_index,
+    double f[8], UGrid& ugrid, std::vector<Vertex>& v, std::vector<Normal>& n, std::map<int, std::array<int, 5>>& m_)
 {
-	auto e_glIndex = [](const int e, const int i_idx, const int j_idx, const int k_idx, UGrid& ugrid)
-	{
-		const unsigned long long gei_pattern_ = 670526590282893600ull;
-		const int i = i_idx + (int)((gei_pattern_ >> 5 * e) & 1); // global_edge_id[eg][0];
-		const int j = j_idx + (int)((gei_pattern_ >> (5 * e + 1)) & 1); // global_edge_id[eg][1];
-		const int k = k_idx + (int)((gei_pattern_ >> (5 * e + 2)) & 1); // global_edge_id[eg][2];
-		const int offs = (int)((gei_pattern_ >> (5 * e + 3)) & 3);
-		return (3 * ugrid.global_index(i, j, k) + offs);
-	};
-	// edge table unsigned long long e_table = 240177437832960;
-	// input e and offset, which direction the normal has to point
-	auto get_vertex_pos = [](const int e, const int offset)
-	{
-		const unsigned long long e_talbe = 240177437832960;
-		return (e_talbe >> (4 * e + 2 * offset)) & 3;
-	};
-	/// compute mc polygons
-	unsigned long long c_ = 0xFFFFFFFFFFFF0000;
-	uint cnt_{ 0 };
-	if (t_ambig[i_case] == MC_AMBIGUOUS)
-	{
-		cnt_ = mc_polygon(i0, f, c_);
-	}
-	else {
-		cnt_ = mc_polygon(i_case, c_);
-	}
-	const unsigned char l_edges_[12]{ 16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98 };
-	ushort e_{ 0 };
-	// compute vertex representative for each mc polygon
-	for (uint t = 0; t < cnt_; t++)
-	{
-		Vertex ei;
-		const int cnt_size = get_cnt_size(t, c_);
-		for (int i = 0; i < cnt_size; i++)
-		{
-			const uint e = get_c(t, i, c_);
-			getLocalCoordinates(l_edges_[e], e, f, i0, ei);
-			//set edge case to construct oriented quadrilateral
-			if (f[(l_edges_[e] & 0xF)] < i0) e_ |= (1 << e);
-		}
-		// normalize
-		ei /= cnt_size;
+    /// compute mc polygons
+    unsigned long long c_ = 0xFFFFFFFFFFFF0000;
+    uint cnt_{ 0 };
+    if (t_ambig[i_case] == MC_AMBIGUOUS)
+    {
+        cnt_ = mc_polygon(i0, f, c_);
+    }
+    else {
+        cnt_ = mc_polygon(i_case, c_);
+    }
+    const unsigned char l_edges_[12]{ 16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98 };
+    ushort e_{ 0 };
+    // collect data
+    std::vector<std::array<double, 2>> bboxU(4, { 0,0, });
+    std::vector<std::array<double, 2>> bboxV(4, { 0,0, });
+    std::vector<std::array<double, 2>> bboxW(4, { 0,0, });
+    for (uint t = 0; t < cnt_; t++)
+    {
+        bboxU[t][0] = 1;
+        bboxU[t][1] = 0;
+        bboxV[t][0] = 1;
+        bboxV[t][1] = 0;
+        bboxW[t][0] = 1;
+        bboxW[t][1] = 0;
+        const int cnt_size = get_cnt_size(t, c_);
+        for (int i = 0; i < cnt_size; i++)
+        {
+            const uint e = get_c(t, i, c_);
+            Vertex ui;
+            getLocalCoordinates(l_edges_[e], e, f, i0, ui);
+            bboxU[t][0] = bboxU[t][0] > ui[0] ? ui[0] : bboxU[t][0];
+            bboxU[t][1] = bboxU[t][1] < ui[0] ? ui[0] : bboxU[t][1];
+            bboxV[t][0] = bboxV[t][0] > ui[1] ? ui[1] : bboxV[t][0];
+            bboxV[t][1] = bboxV[t][1] < ui[1] ? ui[1] : bboxV[t][1];
+            bboxW[t][0] = bboxW[t][0] > ui[2] ? ui[2] : bboxW[t][0];
+            bboxW[t][1] = bboxW[t][1] < ui[2] ? ui[2] : bboxW[t][1];
+            //set edge case to construct oriented quadrilateral
+            if (f[(l_edges_[e] & 0xF)] < i0) e_ |= (1 << e);
+        }
+    }
+    // compute representative and quad indices
+    for (uint t = 0; t < cnt_; t++)
+    {
+        // compute first estimate of vertex representative
+        const int cnt_size = get_cnt_size(t, c_);
+        Vertex p;
+        for (int i = 0; i < cnt_size; i++)
+        {
+            const int e = get_c(t, i, c_);
+            Vertex ui;
+            getLocalCoordinates(l_edges_[e], e, f, i0, ui);
+            p += ui;
+        }
+        p /= cnt_size;
+        uint nrProjectionsFailed1{ 0 };
+        uint nrProjectionsFailed2{ 0 };
+        representative(i0, f, cnt_, c_, t, p, bboxU, bboxV, bboxW, nrProjectionsFailed1, nrProjectionsFailed2);
+        nrProj1 += nrProjectionsFailed1;
+        nrProj2 += nrProjectionsFailed2;
 
-		movePointToSurface(f, i0, ei);
-		// compute normal at mesh vertex
-		Normal ni;
-		ugrid.normal(ni, i_index, j_index, k_index, ei[0], ei[1], ei[2]);
-		// compute euclidean coordinates of new vertex
-		Point pi;
-		ugrid.position(pi, i_index, j_index, k_index, ei[0], ei[1], ei[2]);
-		// add vertex and normal to list
-		const int v_addr = static_cast<int>(v.size());
-		v.push_back(pi);
-		n.push_back(ni);
-
-		// for all this edges save the vertex
-		for (int i = 0; i < cnt_size; i++)
-		{
-			const uint e = get_c(t, i, c_);
-			// compute unique edges id
-			const int e_glId = e_glIndex(e, i_index, j_index, k_index, ugrid);
-			const int pos = get_vertex_pos(e, (e_ >> e) & 1);
-            // compute color
-            int color{ -1 };
-            if (e == 0) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2);
-            if (e == 3) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2) + 1;
-            if (e == 8) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2) + 2;
-			//add vertex to has table
-            if (color == -1)
-                addVertex(e_glId, pos, v_addr, m_);
-            else
-                addVertex(e_glId, pos, v_addr, color, m_);
-		}
-	}
+        // compute normal at mesh vertex
+        Normal ni;
+        ugrid.normal(ni, i_index, j_index, k_index, p[0], p[1], p[2]);
+        // compute euclidean coordinates of new vertex
+        Point pi;
+        ugrid.position(pi, i_index, j_index, k_index, p[0], p[1], p[2]);
+        // add vertex and normal to list
+#pragma omp critical
+        {
+            const int v_addr = static_cast<int>(v.size());
+            v.push_back(pi);
+            n.push_back(ni);
+            //cnt_size = get_cnt_size(t, c_);
+            for (int i = 0; i < cnt_size; i++)
+            {
+                const uint e = get_c(t, i, c_);
+                // compute unique edges id
+                const int e_glId = e_glIndex(e, i_index, j_index, k_index, ugrid);
+                const int pos = get_vertex_pos(e, (e_ >> e) & 1);
+                // compute color
+                int color{ -1 };
+                if (e == 0) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2);
+                if (e == 3) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2) + 1;
+                if (e == 8) color = 3 * ((i_index & 1) | (j_index & 1) << 1 | (k_index & 1) << 2) + 2;
+                //add vertex to has table
+                if (color == -1)
+                    addVertex(e_glId, pos, v_addr, m_);
+                else
+                    addVertex(e_glId, pos, v_addr, color, m_);
+            }
+        }
+    }
 }
 
+void dmc::DualMarchingCubes::representative(const double i0, const double f[8], uint cnt_, ulong& c_, int t, Vertex& p,
+    std::vector<std::array<double, 2>>& bboxU,
+    std::vector<std::array<double, 2>>& bboxV,
+    std::vector<std::array<double, 2>>& bboxW,
+    uint& count1, uint& count2)
+{
+    const uint w_proj = 16434824;
+    const uint v_proj = 16362248;
+    const uint u_proj = 16096528;
+    const int nrSamples{ 9 };
+    // compute case
+    ProjectionDirection prj{ ProjectionDirection::W_PROJECTION };
+    if (get_cnt_size(t, c_) >= 6)
+    {
+        Vector ni = gradient(f, p[0], p[1], p[2]);
+        prj = lProjection(ni);
+    }
+    else
+    {
+        prj = minProjection(bboxU[t][1] - bboxU[t][0], bboxV[t][1] - bboxV[t][0], bboxW[t][1] - bboxW[t][0]);
+    }
+    Vertex pt;
+    switch (prj) {
+    case ProjectionDirection::W_PROJECTION:
+    {
+        pt[0] = p[0];
+        pt[1] = p[1];
+        pt[2] = p[2];
+        if (!projection(w_proj, i0, f, cnt_, c_, t, pt, bboxU, bboxV, bboxW, nrSamples))
+        {
+            count1++;
+            if (!projection(w_proj, i0, f, cnt_, c_, t, pt, bboxU, bboxV, bboxW, nrSamples * 3 + 1))
+            {
+                count2++;
+            }
+        }
+        p[0] = pt[0];
+        p[1] = pt[1];
+        p[2] = pt[2];
+        break;
+    }
+    case ProjectionDirection::V_PROJECTION:
+    {
+        pt[0] = p[0];
+        pt[1] = p[2];
+        pt[2] = p[1];
+        if (!projection(v_proj, i0, f, cnt_, c_, t, pt, bboxU, bboxW, bboxV, nrSamples))
+        {
+            count1++;
+            if (!projection(v_proj, i0, f, cnt_, c_, t, pt, bboxU, bboxW, bboxV, nrSamples * 3 + 1))
+            {
+                count2++;
+            }
+        }
+        p[0] = pt[0];
+        p[1] = pt[2];
+        p[2] = pt[1];
+        break;
+    }
+    case ProjectionDirection::U_PROJECTION:
+    {
+        pt[0] = p[1];
+        pt[1] = p[2];
+        pt[2] = p[0];
+        if (!projection(u_proj, i0, f, cnt_, c_, t, pt, bboxV, bboxW, bboxU, nrSamples))
+        {
+            count1++;
+            if (!projection(u_proj, i0, f, cnt_, c_, t, pt, bboxV, bboxW, bboxU, nrSamples * 3 + 1))
+            {
+                count2++;
+            }
+        }
+        p[0] = pt[2];
+        p[1] = pt[0];
+        p[2] = pt[1];
+        break;
+    }
+    }
+}
 
-unsigned int cpp_mc::DualMarchingCubes::mc_polygon(const double i0, const double F[8], ulong& c_)
+bool dmc::DualMarchingCubes::projection(const uint r, const double i0, const double f[8], uint cnt_, ulong& c_, int t, Vertex& p,
+    std::vector<std::array<double, 2>>& bboxU,
+    std::vector<std::array<double, 2>>& bboxV,
+    std::vector<std::array<double, 2>>& bboxW,
+    const int nrSamples)
+{
+    const double umin{ bboxU[t][0] };
+    const double umax{ bboxU[t][1] };
+    const double vmin{ bboxV[t][0] };
+    const double vmax{ bboxV[t][1] };
+    const double du = (umax - umin) / (nrSamples - 1);
+    const double dv = (vmax - vmin) / (nrSamples - 1);
+    double minDistance = 100;
+    Vertex pt{ 0,0,-1 };
+    double wmin{ bboxW[t][0] };
+    double wmax{ bboxW[t][1] };
+    const double eps{ 1e-5 };
+    // consider tiny bounding box
+    if (std::fabs(wmax - wmin) < eps) {
+        wmin -= eps;
+        wmax += eps;
+    }
+
+    const int cnt_size = get_cnt_size(t, c_);
+    for (int i = 1; i < (nrSamples - 1); i++) {
+        const float u = umin + i * du;
+        for (int j = 1; j < (nrSamples - 1); j++) {
+            const float v = vmin + j * dv;
+            const float g1 = (1 - v) * ((1 - u) * f[0] + u * f[(r >> 3) & 0x7]) + v * ((1 - u) * f[(r >> 6) & 0x7] + u * f[(r >> 9) & 0x7]);
+            const float g2 = (1 - v) * ((1 - u) * f[(r >> 12) & 0x7] + u * f[(r >> 15) & 0x7]) + v * ((1 - u) * f[(r >> 18) & 0x7] + u * f[(r >> 21) & 0x7]);
+            if (g1 == g2) continue;
+            const float w = (i0 - g1) / (g2 - g1);
+            if (wmin <= w && w <= wmax)
+            {
+                if (cnt_ == 1 || cnt_size == 3 || !isInNeighborBBox(u, v, w, cnt_, c_, t, bboxU,bboxV,bboxW))
+                {
+                    const float d = (p[0] - u) * (p[0] - u) + (p[1] - v) * (p[1] - v) + (p[2] - w) * (p[2] - w);
+                    if (minDistance > d) {
+                        minDistance = d;
+                        pt[0] = u;
+                        pt[1] = v;
+                        pt[2] = w;
+                    }
+                }
+            }
+        }
+    }
+    if (pt[2] > -1) {
+        p = pt;
+        return true;
+    }
+    else return false;
+}
+
+unsigned int dmc::DualMarchingCubes::mc_polygon(const double i0, const double F[8], ulong& c_)
 {
     // compute oriented contours
-            // 1. build segments
-            // 2. connect segments
-            // build up segments
-            // set segments map
+    // 1. build segments
+    // 2. connect segments
+    // build up segments
+    // set segments map
     unsigned char segm_[12] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-    auto set_segm = [](const int ei, const int eo, unsigned char segm_[12]) {
-        segm_[ei] &= 0xF0;
-        segm_[ei] |= ((unsigned char)eo) & 0xF;
-        segm_[eo] &= 0xF;
-        segm_[eo] |= ((unsigned char)ei) << 4;
-    };
-    auto get_segm = [](const int e, const int pos, unsigned char segm_[12]) {
-        if (pos == 0)
-            return (int)(segm_[e] & 0xF);
-        else
-            return (int)((segm_[e] >> 4) & 0xF);
-    };
-    auto is_segm_set = [](const int e, unsigned char segm_[12]) {
-        return (segm_[e] != 0xFF);
-    };
-    auto unset_segm = [](const int e, unsigned char segm_[12]) {
-        segm_[e] = 0xFF;
-    };
-    // In order to compute oriented segments, the hexahedron has to be flatten.
-    // The insides of the faces of the hexahedron have to be all at the same
-    // side of the flattend hexa. This requires changing the order of the
-    // edges when reading from the faces
-    // code edges at face
-    unsigned short e_face_[6]{ (ushort)291, (ushort)18277, (ushort)18696, (ushort)10859, (ushort)33719, (ushort)38305 };
-    // code vertices at face
-    unsigned short v_face_[6]{ (ushort)12576, (ushort)25717, (ushort)5380, (ushort)29538, (ushort)8292, (ushort)30001 };
-
-    // reading edge from face
-    auto get_face_e = [e_face_](const int f, const int e) { return ((e_face_[f] >> (4 * e)) & 0xF); };
-    auto get_face_v = [v_face_](const int f, const int e) { return ((v_face_[f] >> (4 * e)) & 0xF); };
-    // compute oriented segments using the isoline scheme at the faces
-    auto asymptotic_decider = [](const double f0, const double f1, const double f2, const double f3) {
-        return (f0 * f3 - f1 * f2) / (f0 + f3 - f1 - f2);
-    };
     for (int f = 0; f < 6; f++) {
         // classify face
         unsigned int f_case{ 0 };
@@ -308,7 +460,7 @@ unsigned int cpp_mc::DualMarchingCubes::mc_polygon(const double i0, const double
     return cnt_;
 }
 
-unsigned int cpp_mc::DualMarchingCubes::mc_polygon(const int i_case, ulong& c_)
+unsigned int dmc::DualMarchingCubes::mc_polygon(const int i_case, ulong& c_)
 {
     int cnt_{ 0 };
     const char* c_lt = &r_pattern[17 * i_case];
@@ -329,11 +481,18 @@ unsigned int cpp_mc::DualMarchingCubes::mc_polygon(const int i_case, ulong& c_)
 }
 
 // Mesh simplification
-void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quads, std::vector<Halfedge>& he, std::vector<int>& he_v, std::vector<int>& he_f)
+//=================================================================================================================
+// Mesh simplification
+// Helper functions
+//=================================================================================================================
+void dmc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quads, std::vector<Halfedge>& he, std::vector<int>& he_v, std::vector<int>& he_f)
 {
+    bndVertices.clear();
     const int nr_q = static_cast<int>(quads.size()) / 4;
-    he_v.resize(nr_v);
-    he_f.resize(nr_q);
+    //he_v.resize(nr_v);
+    he_v.assign(nr_v, INVALID_INDEX);
+    //he_f.resize(nr_q);
+    he_f.assign(nr_q, INVALID_INDEX);
     he.resize(4 * nr_q);
     std::map<ulong, std::array<int, 5>> m_;
     auto setKey = [](const int v0, const int v1)
@@ -343,7 +502,7 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
         else
             return (static_cast<ulong>(v1) << 32) | (v0 & 0xffffffffL);
     };
-    auto addHalfedge = [](const ulong key, const int he, std::map<ulong, std::array<int,5>>& m)
+    auto addHalfedge = [this](const ulong key, const int he, std::map<ulong, std::array<int,5>>& m)
     {
         auto e = m.find(key);
         if (e != m.end())
@@ -356,11 +515,15 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
         else
         {
             // the element has to be created
+            // 1. id of halfedge itself, i.e. index = 0
+            // 2. - 4. are other halfedges sharing the same two vertices, i.e. indices 1 - 3
+            // 5. pointer into array giving address to write next halfedge id, start at second slot, i.e. index = 1
             std::array<int, 5> h{ INVALID_INDEX,INVALID_INDEX,INVALID_INDEX,INVALID_INDEX, 1 };
             h[0] = he;
             m[key] = h;
         }
     };
+#pragma omp parallel for
     for (int i = 0; i < nr_q; i++)
     {
         // quad vertices
@@ -373,10 +536,10 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
         // he[2] = next
         // he[3] = tween
         // he[4] = 0 - manifold, 1 non-manifold
-        std::array<int, 5> e0_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
-        std::array<int, 5> e1_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
-        std::array<int, 5> e2_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
-        std::array<int, 5> e3_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
+        Halfedge e0_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
+        Halfedge e1_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
+        Halfedge e2_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
+        Halfedge e3_{ INVALID_INDEX, i, INVALID_INDEX, INVALID_INDEX, MANIFOLD };
         // origin vertex
         e0_[0] = v0;
         e1_[0] = v1;
@@ -400,10 +563,13 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
         he_v[v2] = 4 * i + 2;
         he_v[v3] = 4 * i + 3;
         // add halfedges to hash table
-        addHalfedge(setKey(v0, v1), 4 * i, m_);
-        addHalfedge(setKey(v1, v2), 4 * i + 1, m_);
-        addHalfedge(setKey(v2, v3), 4 * i + 2, m_);
-        addHalfedge(setKey(v3, v0), 4 * i + 3, m_);
+#pragma omp critical
+        {
+            addHalfedge(setKey(v0, v1), 4 * i, m_);
+            addHalfedge(setKey(v1, v2), 4 * i + 1, m_);
+            addHalfedge(setKey(v2, v3), 4 * i + 2, m_);
+            addHalfedge(setKey(v3, v0), 4 * i + 3, m_);
+        }
     }
     // connect halfedge twins
     int nr_nonmanifold{ 0 };
@@ -414,7 +580,6 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
         {
         case 1:
         {
-            // this is a boundary edge
             const int e0 = e.second[0];
             he[e0][3] = INVALID_INDEX;
             break;
@@ -425,6 +590,44 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
             const int e1 = e.second[1];
             he[e0][3] = e1;
             he[e1][3] = e0;
+            break;
+        }
+        case 3:
+        {
+            const int e0 = e.second[0];
+            const int e1 = e.second[1];
+            const int e2 = e.second[2];
+            const int v0 = he[e0][0];
+            const int v1 = he[e1][0];
+            const int v2 = he[e2][0];
+            he[e0][4] = BOUNDARY_MULTIPLE_EDGE;
+            he[e1][4] = BOUNDARY_MULTIPLE_EDGE;
+            he[e2][4] = BOUNDARY_MULTIPLE_EDGE;
+            if (v0 != v1) {
+                bndVertices.push_back(v0);
+                bndVertices.push_back(v1);
+                he[e0][3] = e1;
+                he[e1][3] = e0;
+                he[e2][3] = INVALID_INDEX;
+                he_v[v2] = e2;
+            }
+            else if (v0 != v2) {
+                bndVertices.push_back(v0);
+                bndVertices.push_back(v2);
+                he[e0][3] = e2;
+                he[e2][3] = e0;
+                he[e1][3] = INVALID_INDEX;
+                he_v[v1] = e1;
+            }
+            else {
+                bndVertices.push_back(v1);
+                bndVertices.push_back(v2);
+                he[e1][3] = e2;
+                he[e2][3] = e1;
+                he[e0][3] = INVALID_INDEX;
+                he_v[v0] = e0;
+            }
+            nr_nonmanifold++;
             break;
         }
         case 4:
@@ -460,14 +663,14 @@ void cpp_mc::DualMarchingCubes::halfedges(const int nr_v, std::vector<int>& quad
             break;
         }
         default:
-            std::cout << "ERROR: wrong nr. of faces sharing an edge: " << c << std::endl;
+            std::cout << " ... ERROR: wrong nr. of faces sharing an edge: " << c << std::endl;
             break;
         }
     }
     std::cout << " ... nr. of non-manifold edges: " << nr_nonmanifold << std::endl;
 }
 
-std::array<int, 4> cpp_mc::DualMarchingCubes::collectNeighbors(const int quad, std::vector<Halfedge>& he, std::vector<int>& he_f)
+std::array<int, 4> dmc::DualMarchingCubes::collectNeighbors(const int quad, std::vector<Halfedge>& he, std::vector<int>& he_f)
 {
     // he[0] = origin vertex
     // he[1] = face
@@ -508,7 +711,7 @@ std::array<int, 4> cpp_mc::DualMarchingCubes::collectNeighbors(const int quad, s
 /// <param name="he">halfedges</param>
 /// <param name="he_f">halfedge faces</param>
 /// <param name="colors">face colors</param>
-void cpp_mc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vector<int>& he_f, std::vector<int>& colors)
+void dmc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vector<int>& he_f, std::vector<int>& colors)
 {
     const int nr_q{ static_cast<int>(he_f.size()) };
     // classify faces with colors larger than 5
@@ -532,7 +735,7 @@ void cpp_mc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vecto
         {
             // collect neighbors
             std::array<int, 4> n = collectNeighbors(f, he, he_f);
-            // collect collors
+            // collect colors
             int c0{ INVALID_COLOR };
             int c1{ INVALID_COLOR };
             int c2{ INVALID_COLOR };
@@ -562,20 +765,20 @@ void cpp_mc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vecto
                 colors[f] = 3;
                 continue;
             }
-            if (c0 != 4 && c1 != 4 && c2 != 4 && c2 != 4)
+            if (c0 != 4 && c1 != 4 && c2 != 4 && c3 != 4)
             {
                 colors[f] = 4;
                 continue;
             }
         }
     }
-    // opimize colors, reduce the number of faces with color 4 as much as possible
+    // optimize colors, reduce the number of faces with color 4 as much as possible
     //for (int f = 0; f < nr_q; f++)
     for (auto f : fColor4)
     {
         // collect neighbors
         std::array<int, 4> n = collectNeighbors(f, he, he_f);
-        // collect collors
+        // collect colors
         int c0{ INVALID_COLOR };
         int c1{ INVALID_COLOR };
         int c2{ INVALID_COLOR };
@@ -606,6 +809,7 @@ void cpp_mc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vecto
             continue;
         }
     }
+    /*
     // check which colors remain
     std::array<int, 6> c_{ 0,0,0,0,0,0 };
     for (auto c : colors)
@@ -636,9 +840,11 @@ void cpp_mc::DualMarchingCubes::colorFaces(std::vector<Halfedge>& he, std::vecto
     {
         std::cout << " ... colors: " << c << std::endl;
     }
+    */
 }
 
-void cpp_mc::DualMarchingCubes::vertexValence(const int nr_v, std::vector<Halfedge>& he_, std::vector<int>& vV)
+
+void dmc::DualMarchingCubes::vertexValence(const int nr_v, std::vector<Halfedge>& he_, std::vector<int>& vV)
 {
     // he[0] = origin vertex
     // he[1] = face
@@ -658,9 +864,13 @@ void cpp_mc::DualMarchingCubes::vertexValence(const int nr_v, std::vector<Halfed
             vV[he_[ne][0]]++;
         }
     }
+    const int minV = *std::min_element(vV.begin(), vV.end());
+    if (minV == 0) {
+        std::cout << "ERROR: there are elements with valence 0" << std::endl;
+    }
 }
 
-bool cpp_mc::DualMarchingCubes::isNonManifold(const int f, std::vector<Halfedge>& he, std::vector<int>& he_f)
+bool dmc::DualMarchingCubes::isNonManifold(const int f, std::vector<Halfedge>& he, std::vector<int>& he_f)
 {
     const int e0 = he_f[f];
     const int e1 = he[e0][2];
@@ -671,11 +881,17 @@ bool cpp_mc::DualMarchingCubes::isNonManifold(const int f, std::vector<Halfedge>
     else
         return false;
 }
-void cpp_mc::DualMarchingCubes::mark3X3Y(std::vector<int>& quads, std::vector<int>& vV, std::vector<bool>& p3X3Y)
+
+//=================================================================================================================
+// Mesh simplification
+// Pattern 3X3Y
+//=================================================================================================================
+void dmc::DualMarchingCubes::mark3X3Y(std::vector<int>& quads, std::vector<int>& vV, std::vector<bool>& p3X3Y)
 {
     const int nr_q{ static_cast<int>(quads.size()) / 4 };
     p3X3Y.resize(nr_q);
     std::fill(p3X3Y.begin(), p3X3Y.end(), false);
+#pragma omp parallel for
     for (int f = 0; f < nr_q; f++)
     {
         const int v0{ quads[4 * f] };
@@ -697,16 +913,15 @@ void cpp_mc::DualMarchingCubes::mark3X3Y(std::vector<int>& quads, std::vector<in
 }
 
 // Color based simplification of elements with vertex valence pattern 3X3Y
-void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& normals, std::vector<bool> p3X3Y,
+void dmc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& normals, std::vector<bool> p3X3Y,
     std::vector<int>& vV, std::vector<int>& colors, std::vector<Halfedge>& he, std::vector<int>& he_f,
     std::vector<std::pair<bool, int>>& vm_, std::vector<bool>& em_)
 {
     const int nr_q{ static_cast<int>(he_f.size()) };
     const int nr_v{ static_cast<int>(v.size()) };
-    vm_.resize(nr_v);
+    vm_.resize(nr_v, std::make_pair(false, INVALID_INDEX));
     em_.resize(nr_q, false);
-    std::fill(vm_.begin(), vm_.end(), std::make_pair(false, INVALID_INDEX));
-    std::fill(em_.begin(), em_.end(), false);
+    // main loop
     for (int f = 0; f < nr_q; f++)
     {
         const int c = colors[f];
@@ -723,12 +938,14 @@ void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::v
         const int e2 = he[e1][2];
         const int e3 = he[e2][2];
         //if (he[e0][4] == NON_MANIFOLD || he[e1][4] == NON_MANIFOLD || he[e2][4] == NON_MANIFOLD || he[e3][4] == NON_MANIFOLD) continue;
-        // collect neghibors and check pattern and colors, be careful not to be at the boundary
+        // collect neighbors and check pattern and colors, be careful not to be at the boundary
         std::array<int, 4> n = collectNeighbors(f, he, he_f);
         bool nonManifoldNeighbor{ false };
         for (auto e : n)
         {
-            if (isNonManifold(e,he,he_f))
+            if (e >= 0 && isNonManifold(e,he,he_f))
+                nonManifoldNeighbor = true;
+            if (e < 0)
                 nonManifoldNeighbor = true;
         }
         if (nonManifoldNeighbor) continue;
@@ -794,7 +1011,7 @@ void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::v
     }
 }
 // Simplification of elements with vertex valence pattern 3X3Y, only consider neighbors
-void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& normals, std::vector<bool> p3X3Y,
+void dmc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& normals, std::vector<bool> p3X3Y,
     std::vector<int>& vV, std::vector<Halfedge>& he, std::vector<int>& he_f,
     std::vector<std::pair<bool, int>>& vm_, std::vector<bool>& em_)
 {
@@ -867,7 +1084,7 @@ void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::v
 
             // mark v3 to be removed
             vm_[v3].first = true;
-            // set twins, remove v3, use addres of v1
+            // set twins, remove v3, use address of v1
             vm_[v3].second = v1;
 
             // element has to be removed
@@ -876,7 +1093,7 @@ void cpp_mc::DualMarchingCubes::mergeVertices3X3Y(std::vector<Vertex>& v, std::v
     }
 }
 
-void cpp_mc::DualMarchingCubes::removeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<std::pair<bool, int>>& vm_,
+void dmc::DualMarchingCubes::removeVertices3X3Y(std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<std::pair<bool, int>>& vm_,
     std::vector<Vertex>& nv, std::vector<Normal>& nn)
 {
     const int nr_v{ static_cast<int>(v.size()) };
@@ -894,7 +1111,7 @@ void cpp_mc::DualMarchingCubes::removeVertices3X3Y(std::vector<Vertex>& v, std::
     }
 }
 
-void cpp_mc::DualMarchingCubes::removeQuadrilaterals3X3Y(std::vector<int>& q, std::vector<bool>& em,
+void dmc::DualMarchingCubes::removeQuadrilaterals3X3Y(std::vector<int>& q, std::vector<bool>& em,
     std::vector<std::pair<bool, int>>& vm, std::vector<int>& nq)
 {
     const int nr_q{ static_cast<int>(q.size()) / 4 };
@@ -919,7 +1136,7 @@ void cpp_mc::DualMarchingCubes::removeQuadrilaterals3X3Y(std::vector<int>& q, st
     }
 }
 
-void cpp_mc::DualMarchingCubes::simplify3X3Y(std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<int>& quads, std::vector<int>& colors)
+void dmc::DualMarchingCubes::simplify3X3Y(std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<int>& quads, std::vector<int>& colors)
 {
     int nr_v = static_cast<int>(v.size());
     std::vector<std::array<int, 5>> he_; // mark manifold and non-manifold halfedges
@@ -960,10 +1177,284 @@ void cpp_mc::DualMarchingCubes::simplify3X3Y(std::vector<Vertex>& v, std::vector
     removeVertices3X3Y(v, n, vm_, nv, nn);
     removeQuadrilaterals3X3Y(quads, em_, vm_, nq);
     // copy elements back to input arrays
-    v.resize(nv.size());
-    std::copy(nv.begin(), nv.end(), v.begin());
-    n.resize(nn.size());
-    std::copy(nn.begin(), nn.end(), n.begin());
-    quads.resize(nq.size());
-    std::copy(nq.begin(), nq.end(), quads.begin());
+    v.assign(nv.begin(), nv.end());
+    n.assign(nn.begin(), nn.end());
+    quads.assign(nq.begin(), nq.end());
+}
+
+//=================================================================================================================
+// Mesh simplification
+// Pattern 3333
+//=================================================================================================================
+void
+dmc::DualMarchingCubes::mark3333(const int nr_v, std::vector<int>& quads,
+    std::vector < std::array<int, 5> >& he, std::vector<int>& he_f,
+    std::vector<int>& vV, std::vector< std::tuple<bool, int, int> >& vm,
+    std::vector<bool>& p3333, std::vector<bool>& rFlag)
+{
+    // he[0] = origin vertex
+    // he[1] = face
+    // he[2] = next
+    // he[3] = twin
+    // he[4] = 0 - manifold, 1 non-manifold
+    const int nr_q{ static_cast<int>(quads.size()) / 4 };
+    p3333.assign(nr_q, false);
+    rFlag.assign(nr_q, false);
+    //vm.resize(nr_v);
+    vm.assign(nr_v, std::make_tuple(false, -1, -1));
+#pragma omp parallel for
+    for (int f = 0; f < nr_q; f++)
+    {
+        if (isNonManifold(f, he, he_f)) continue;
+        const int e0 = he_f[f];
+        const int e1 = he[e0][2];
+        const int e2 = he[e1][2];
+        const int e3 = he[e2][2];
+
+        const int v0{ he[e0][0] };
+        const int v1{ he[e1][0] };
+        const int v2{ he[e2][0] };
+        const int v3{ he[e3][0] };
+
+        const int valence0 = vV[v0];
+        const int valence1 = vV[v1];
+        const int valence2 = vV[v2];
+        const int valence3 = vV[v3];
+        if (valence0 != 3 || valence1 != 3 || valence2 != 3 || valence3 != 3) continue; // all four vertices must have valence 3
+        // collect neighborhood
+        int twin{ -1 };
+        int next{ -1 };
+        // f0
+        twin = he[e0][3];
+        if (twin == -1) continue; // boundary element
+        const int f0 = he[twin][1];
+        next = he[twin][2];
+        next = he[next][2];
+        const int v4 = he[next][0];
+        // f1
+        twin = he[e1][3];
+        if (twin == -1) continue; // boundary element
+        const int f1 = he[twin][1];
+        next = he[twin][2];
+        next = he[next][2];
+        const int v5 = he[next][0];
+        // f2
+        twin = he[e2][3];
+        if (twin == -1) continue; // boundary element
+        const int f2 = he[twin][1];
+        next = he[twin][2];
+        next = he[next][2];
+        const int v6 = he[next][0];
+        // f3
+        twin = he[e3][3];
+        if (twin == -1) continue; // boundary element
+        const int f3 = he[twin][1];
+        next = he[twin][2];
+        next = he[next][2];
+        const int v7 = he[next][0];
+        // check for manifoldness
+        if (isNonManifold(f0, he, he_f)) continue;
+        if (isNonManifold(f1, he, he_f)) continue;
+        if (isNonManifold(f2, he, he_f)) continue;
+        if (isNonManifold(f3, he, he_f)) continue;
+
+        const int valence4 = vV[v4];
+        const int valence5 = vV[v5];
+        const int valence6 = vV[v6];
+        const int valence7 = vV[v7];
+        // check if neighor is of the sampe type
+        bool flag0 = (valence4 == 3 && valence5 == 3);
+        bool flag1 = (valence5 == 3 && valence6 == 3);
+        bool flag2 = (valence6 == 3 && valence7 == 3);
+        bool flag3 = (valence7 == 3 && valence4 == 3);
+        if (flag0 || flag1 || flag2 || flag3) {
+            // element can't be removed
+            continue;
+        }
+        // valence will be reduced by one by neighbor vertices,
+        // if one vertex has valence 3, simplification can't be done,
+        // it will result in one vertex with valence 2
+        if (valence4 == 3 || valence5 == 3 || valence6 == 3 || valence7 == 3) {
+            // element can't be removed
+            continue;
+        }
+        // check for special case, where removing element would
+        // generate a non-manifold mesh
+        if (valence4 == 4 && valence5 == 4 && valence6 == 4 && valence7 == 4) {
+            continue;
+        }
+        // mark elements
+        // frist element of tuple: vertex is of type 3333 element
+        // second element of tuple: twin vertex or new element index
+        // third element in tuple: index to map vertex index to. Set invalid index first
+        vm[v0] = std::make_tuple(true, v4, -1);
+        vm[v1] = std::make_tuple(true, v5, -1);
+        vm[v2] = std::make_tuple(true, v6, -1);
+        vm[v3] = std::make_tuple(true, v7, -1);
+        // mark faces
+        p3333[f] = true;
+        rFlag[f0] = true;
+        rFlag[f1] = true;
+        rFlag[f2] = true;
+        rFlag[f3] = true;
+    }
+}
+void
+dmc::DualMarchingCubes::removeVertices3333(std::vector<Vertex>& v, std::vector<Normal>& n,
+    std::vector < std::tuple<bool, int, int> >& vm, std::vector<Vertex>& nv, std::vector<Normal>& nn)
+{
+    const int nr_v = static_cast<int>(v.size());
+    nv.reserve(nr_v);
+    nn.reserve(nr_v);
+    for (int i = 0; i < nr_v; i++) {
+        if (!std::get<0>(vm[i])) {
+            // this vertex will not be removed
+            const int addr = static_cast<int>(nv.size());
+            std::get<2>(vm[i]) = addr;
+            nv.push_back(v[i]);
+            nn.push_back(n[i]);
+        }
+    }
+}
+void
+dmc::DualMarchingCubes::removeQuadrilaterals3333(std::vector<int>& quads,
+    std::vector<bool>& p3333, std::vector<bool>& rFlag,
+    std::vector< std::tuple<bool, int, int> >& vm, std::vector<int>& nq)
+{
+    const int nr_q{ static_cast<int>(quads.size()) / 4 };
+    nq.reserve(4 * nr_q);
+    for (int f = 0; f < nr_q; f++) {
+        if (!rFlag[f])
+        {
+            // compute new quadrilateral
+            const int v0 = quads[4 * f];
+            const int v1 = quads[4 * f + 1];
+            const int v2 = quads[4 * f + 2];
+            const int v3 = quads[4 * f + 3];
+            int i0{ -1 };
+            int i1{ -1 };
+            int i2{ -1 };
+            int i3{ -1 };
+            if (p3333[f]) {
+                const int twin0 = std::get<1>(vm[v0]);
+                const int twin1 = std::get<1>(vm[v1]);
+                const int twin2 = std::get<1>(vm[v2]);
+                const int twin3 = std::get<1>(vm[v3]);
+                i0 = std::get<2>(vm[twin0]);
+                i1 = std::get<2>(vm[twin1]);
+                i2 = std::get<2>(vm[twin2]);
+                i3 = std::get<2>(vm[twin3]);
+            }
+            else {
+                i0 = std::get<2>(vm[v0]);
+                i1 = std::get<2>(vm[v1]);
+                i2 = std::get<2>(vm[v2]);
+                i3 = std::get<2>(vm[v3]);
+            }
+            nq.push_back(i0);
+            nq.push_back(i1);
+            nq.push_back(i2);
+            nq.push_back(i3);
+        }
+    }
+}
+
+void dmc::DualMarchingCubes::simplify3333(std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<int>& quads)
+{
+    int nr_v = static_cast<int>(v.size());
+    std::vector<std::array<int, 5>> he_; // mark manifold and non-manifold halfedges
+    std::vector<int> v_;
+    std::vector<int> f_;
+    std::vector<int> vV_;
+    std::vector<bool> p3333;
+    std::vector<bool> rFlag;
+    std::vector<std::tuple<bool, int, int>> vm_;
+    std::vector<bool> em_;
+    std::vector<Vertex> nv;
+    std::vector<Normal> nn;
+    std::vector<int> nq;
+    halfedges(nr_v, quads, he_, v_, f_);
+    vertexValence(nr_v, he_, vV_);
+    mark3333(nr_v, quads, he_, f_, vV_, vm_, p3333, rFlag);
+    removeVertices3333(v, n, vm_, nv, nn);
+    removeQuadrilaterals3333(quads, p3333, rFlag, vm_, nq);
+    // copy elements back to input arrays
+    v.assign(nv.begin(), nv.end());
+    n.assign(nn.begin(), nn.end());
+    quads.assign(nq.begin(), nq.end());
+}
+
+void dmc::DualMarchingCubes::collectTriangles(std::vector<int>& tris, std::vector<int>& quads, std::vector<Vertex>& v)
+{
+    const int nr_q = static_cast<int>(quads.size()) / 4;
+#pragma omp parallel for
+    for (int i = 0; i < nr_q; i++)
+    {
+        const int v0 = quads[4 * i];
+        const int v1 = quads[4 * i + 1];
+        const int v2 = quads[4 * i + 2];
+        const int v3 = quads[4 * i + 3];
+        /*tris.push_back(v0);
+        tris.push_back(v1);
+        tris.push_back(v2);
+        // second triangle
+        tris.push_back(v0);
+        tris.push_back(v2);
+        tris.push_back(v3);
+        */
+        double a1_ = minAngle(v[v0], v[v1], v[v2]);
+        double a2_ = minAngle(v[v0], v[v2], v[v3]);
+        const double b1_ = std::min(a1_, a2_);
+        const double b2_ = std::max(a1_, a2_);
+        a1_ = minAngle(v[v1], v[v3], v[v0]);
+        a2_ = minAngle(v[v1], v[v2], v[v3]);
+        const double c1_ = std::min(a1_, a2_);
+        const double c2_ = std::max(a1_, a2_);
+        std::array<int, 6> t;
+        if (b1_ < c1_ || (b1_ == c1_ && b2_ <= c2_))
+        {
+            t[0] = v1;
+            t[1] = v3;
+            t[2] = v0;
+            t[3] = v1;
+            t[4] = v2;
+            t[5] = v3;
+            /*// first triangle
+            tris.push_back(v1);
+            tris.push_back(v3);
+            tris.push_back(v0);
+            // second triangle
+            tris.push_back(v1);
+            tris.push_back(v2);
+            tris.push_back(v3);
+            */
+        }
+        else
+        {
+            t[0] = v0;
+            t[1] = v1;
+            t[2] = v2;
+            t[3] = v0;
+            t[4] = v2;
+            t[5] = v3;
+            /*
+            tris.push_back(v0);
+            tris.push_back(v1);
+            tris.push_back(v2);
+            // second triangle
+            tris.push_back(v0);
+            tris.push_back(v2);
+            tris.push_back(v3);
+            */
+        }
+#pragma omp critical
+        {
+            tris.push_back(t[0]);
+            tris.push_back(t[1]);
+            tris.push_back(t[2]);
+            tris.push_back(t[3]);
+            tris.push_back(t[4]);
+            tris.push_back(t[5]);
+        }
+    }
 }

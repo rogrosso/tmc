@@ -32,3 +32,11 @@ cpp_dmc/build/CMakeFiles/CPP_DMC.dir/main.cpp.o
 cpp_dmc/build/CMakeFiles/CPP_DMC.dir/progress.make
 cpp_dmc/build/CMakeFiles/CPP_DMC.dir/Timer.cpp.o
 cpp_dmc/build/CMakeFiles/CPP_DMC.dir/UniformGrid.cpp.o
+cpp_dmc/dmc_mesh_quad.obj
+cpp_dmc/dmc_mesh_tris.obj
+dmc/compile.bat
+dmc/dmc.exe
+dmc/dmc.exp
+dmc/dmc.lib
+dmc/dmc_mesh_quad.obj
+dmc/dmc_mesh_tris.obj

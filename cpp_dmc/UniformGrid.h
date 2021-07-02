@@ -13,13 +13,14 @@
 // project
 #include "Vector.h"
 
-namespace cpp_mc {
+namespace dmc {
 
 	class UniformGrid {
 	public:
 		using ushort = unsigned short;
-		using Point = Vector;
-		using Normal = Vector;
+		using Vertex = dmc::Vector;
+		using Point = dmc::Vector;
+		using Normal = dmc::Vector;
 		using Index = std::array<int, 3>;
 		using BBox = std::array<Point, 8>;
 	public:
@@ -70,12 +71,53 @@ namespace cpp_mc {
 		/// bounding box size
 		std::array<Point, 8> bbox() { return m_bbox; }
 		std::array<Point, 8> bbox() const { return m_bbox; }
+		void bbox(const double xmin, const double xmax, const double ymin, const double ymax, const double zmin, const double zmax)
+		{
+			// v0
+			m_bbox[0][0] = xmin;
+			m_bbox[0][1] = ymin;
+			m_bbox[0][2] = zmin;
+			// v1
+			m_bbox[1][0] = xmax;
+			m_bbox[1][1] = ymin;
+			m_bbox[1][2] = zmin;
+			// v2
+			m_bbox[2][0] = xmin;
+			m_bbox[2][1] = ymax;
+			m_bbox[2][2] = zmin;
+			// v3
+			m_bbox[3][0] = xmax;
+			m_bbox[3][1] = ymax;
+			m_bbox[3][2] = zmin;
+			// v4
+			m_bbox[4][0] = xmin;
+			m_bbox[4][1] = ymin;
+			m_bbox[4][2] = zmax;
+			// v5
+			m_bbox[5][0] = xmax;
+			m_bbox[5][1] = ymin;
+			m_bbox[5][2] = zmax;
+			// v6
+			m_bbox[6][0] = xmin;
+			m_bbox[6][1] = ymax;
+			m_bbox[6][2] = zmax;
+			// v7
+			m_bbox[7][0] = xmax;
+			m_bbox[7][1] = ymax;
+			m_bbox[7][2] = zmax;
+		}
 		double minX() { return m_bbox[0][0]; }
+		double minX() const { return m_bbox[0][0]; }
 		double minY() { return m_bbox[0][1]; }
+		double minY() const { return m_bbox[0][1]; }
 		double minZ() { return m_bbox[0][2]; }
+		double minZ() const { return m_bbox[0][2]; }
 		double maxX() { return m_bbox[7][0]; }
+		double maxX() const { return m_bbox[7][0]; }
 		double maxY() { return m_bbox[7][1]; }
+		double maxY() const { return m_bbox[7][1]; }
 		double maxZ() { return m_bbox[7][2]; }
+		double maxZ() const { return m_bbox[7][2]; }
 
 		/// Returns a point with the euclidean position of the vertex (i,j,k).
 		/** This methods does not check if vertex is within the uniform grid
@@ -111,7 +153,44 @@ namespace cpp_mc {
 		/// returns scalar value at grid node specified by index i.
 		double scalar(const Index i) { return m_scalars[global_index(i)]; }
 		double scalar(const Index i) const { return m_scalars[global_index(i)]; }
+		/// compute scalar value at input point
+		double scalar(Point& p)
+		{
+			int i0 = static_cast<int>((p[0] - m_bbox[0][0]) / m_dx);
+			int j0 = static_cast<int>((p[1] - m_bbox[0][1]) / m_dy);
+			int k0 = static_cast<int>((p[2] - m_bbox[0][2]) / m_dz);
+			if (i0 >= (m_nx - 1)) {
+				i0 = m_nx - 2;
+			}
+			if (j0 >= (m_ny - 1)) {
+				j0 = m_ny - 2;
+			}
+			if (k0 >= (m_nz - 1)) {
+				k0 = m_nz - 2;
+			}
+			const Point p0 = point(i0, j0, k0);
+			//const Point p1 = point(i0+1, j0, k0);
+			//const Point p2 = point(i0, j0 + 1, k0);
+			//const Point p4 = point(i0, j0, k0 + 1);
+			double f[8];
+			f[0] = scalar(i0, j0, k0);
+			f[1] = scalar(i0+1, j0, k0);
+			f[2] = scalar(i0, j0+1, k0);
+			f[3] = scalar(i0+1, j0+1, k0);
+			f[4] = scalar(i0, j0, k0+1);
+			f[5] = scalar(i0+1, j0, k0+1);
+			f[6] = scalar(i0, j0+1, k0+1);
+			f[7] = scalar(i0+1, j0+1, k0+1);
+			const double u = (p[0] - p0[0]) / m_dx; // (p1[0] - p0[0]);
+			const double v = (p[1] - p0[1]) / m_dy; // (p2[1] - p0[1]);
+			const double w = (p[2] - p0[2]) / m_dz; // (p4[2] - p0[2]);
 
+			return (1 - w) * ((1 - v) * ((1 - u) * f[0] + u * f[1]) + v * ((1 - u) * f[2] + u * f[3]))
+				+ w * ((1 - v) * ((1 - u) * f[4] + u * f[5]) + v * ((1 - u) * f[6] + u * f[7]));
+		}
+
+		/// set gradient at given position in array
+		void gradient(const int i, const int j, const int k, const Normal& g) { m_gradient[global_index(i, j, k)] = g; }
 		/// returns the normal vector at grid's node using node's global index.
 		Vector gradient(const int gindex) { return m_gradient[gindex]; }
 		const Vector gradient(const int gindex) const { return m_gradient[gindex]; }
@@ -151,6 +230,28 @@ namespace cpp_mc {
 			v[6] = point(i0, j0 + 1, k0 + 1);
 			v[7] = point(i0 + 1, j0 + 1, k0 + 1);
 		}
+		void cellVertices(const int i0, const int j0, const int k0, Point v[8])
+		{
+			v[0] = point(i0, j0, k0);
+			v[1] = point(i0 + 1, j0, k0);
+			v[2] = point(i0, j0 + 1, k0);
+			v[3] = point(i0 + 1, j0 + 1, k0);
+			v[4] = point(i0, j0, k0 + 1);
+			v[5] = point(i0 + 1, j0, k0 + 1);
+			v[6] = point(i0, j0 + 1, k0 + 1);
+			v[7] = point(i0 + 1, j0 + 1, k0 + 1);
+		}
+		void cellGradients(const int i0, const int j0, const int k0, Normal n[8])
+		{
+			n[0] = m_gradient[global_index(i0, j0, k0)];
+			n[1] = m_gradient[global_index(i0 + 1, j0, k0)];
+			n[2] = m_gradient[global_index(i0, j0 + 1, k0)];
+			n[3] = m_gradient[global_index(i0 + 1, j0 + 1, k0)];
+			n[4] = m_gradient[global_index(i0, j0, k0 + 1)];
+			n[5] = m_gradient[global_index(i0 + 1, j0, k0 + 1)];
+			n[6] = m_gradient[global_index(i0, j0 + 1, k0 + 1)];
+			n[7] = m_gradient[global_index(i0 + 1, j0 + 1, k0 + 1)];
+		}
 		/// compute global index.
 		int global_index(const Point p)
 		{
@@ -165,6 +266,12 @@ namespace cpp_mc {
 		int global_index(const Index i) { return (i[2]*m_ny*m_nx + i[1] * m_nx + i[0]); }
 		int global_index(const Index i) const { return (i[2] * m_ny*m_nx + i[1] * m_nx + i[0]); }
 		Index local_index(const int g_index) { return Index{ g_index % m_nx,(g_index / m_nx) % m_ny, g_index / (m_nx*m_ny) }; }
+        Index local_index(const int g_index) const { return Index{ g_index % m_nx,(g_index / m_nx) % m_ny, g_index / (m_nx*m_ny) }; }
+        void local_index(const int g_index, int& i, int& j, int& k) {
+            i = g_index%m_nx;
+            j = (g_index / m_nx)%m_ny;
+            k = g_index/(m_nx*m_ny);
+        }
 		/// interpolate scalar
 		//double interpolate_scalar(const Point& p);
 		/// interplate normal
@@ -206,7 +313,23 @@ namespace cpp_mc {
 			myfile.write((char*)&m_scalars[0], sizeof(double) * bytes);
 			myfile.close();
 		}
-
+		void clear()
+		{
+			m_nx = 0; //!< grid size in x-direction
+			m_ny = 0; //!< grid size in y-direction
+			m_nz = 0; //!< grid size in z-direction
+			m_dx = 0; //!< grid spacing in x-direction
+			m_dy = 0; //!< grid spacing in y-direction
+			m_dz = 0; //!< grid spacing in z-direction
+			for (int i = 0; i < 8; i++)
+			{
+				m_bbox[i][0] = 0;
+				m_bbox[i][1] = 0;
+				m_bbox[i][2] = 0;
+			}
+			m_scalars.clear(); //!< scalar values stored in the ugrid
+			m_gradient.clear(); //!< estimated gradient of scalar field
+		}
 	private:
 		int m_nx{ 0 }; //!< grid size in x-direction
 		int m_ny{ 0 }; //!< grid size in y-direction
