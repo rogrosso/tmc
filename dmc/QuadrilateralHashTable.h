@@ -124,17 +124,25 @@ namespace p_mc {
             }
             return false;
         }
-        /// hash function 
-        __device__ int hash_function(const int key)
+        /// hash function
+       /* __device__ int hash_function(const int key)
         {
             return ((3 * key) % 300000007) % t_size;
+        }*/
+        __device__ int hash_function(const int key)
+        {
+            /*const int addr = ((3ll * static_cast<unsigned long long>(key)) % 300000007ll) % t_size;
+            if (addr < 0) {
+                printf("Negative address\n");
+            }*/
+            return ((3ll * static_cast<unsigned long long>(key)) % 300000007ll) % t_size;
         }
         /// <summary>
         /// Returns indices of all four vertices constituting the quadrilateral
         /// </summary>
         /// <param name="pos">bucket address</param>
         /// <returns>indices of vertices</returns>
-        __device__ int4 quadrilateral(const int pos) 
+        __device__ int4 quadrilateral(const int pos)
         {
             int4 q;
             q.x = indexBuff[4 * pos];

@@ -72,7 +72,7 @@ namespace p_mc {
         /// add vertex
         __device__ void addFace(const int pos, const int f)
         {
-            he_e[pos] = f; 
+            he_e[pos] = f;
             setColor(pos, INVALID_COLOR);
             unsetNonManifold(pos);
             clearPatternBits(pos);

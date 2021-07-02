@@ -23,7 +23,7 @@
 
 namespace p_mc {
     /// <summary>
-    /// Faces in the DMC mesh will be colored using five colors. 
+    /// Faces in the DMC mesh will be colored using five colors.
     /// The initial coloring is inherited from an edge coloring
     /// of the input grid consisting of 24 colors, from 0 t0 23.
     /// This class will eliminate 19 colors, the colors 5 to 23.
@@ -66,11 +66,11 @@ namespace p_mc {
                 for (int i = 0; i < cSz; i++)
                 {
                     cudaMalloc(&colors[i], nr_f * sizeof(int));
-                    p_mc::cudaError(__FILE__, __LINE__);
+                    cudaCheckError();
                     colors_[i].reset(colors[i], cudaFree);
                     //colors_[i] = std::make_shared<int>(colors[i], cudaFree);
                     cudaMalloc(&t_size[i], sizeof(int));
-                    p_mc::cudaError(__FILE__, __LINE__);
+                    cudaCheckError(); // p_mc::cudaError(__FILE__, __LINE__);
                     cudaMemset(t_size[i], 0, sizeof(int));
                     t_size_[i].reset(t_size[i], cudaFree);
                 }
@@ -103,11 +103,11 @@ namespace p_mc {
                 for (int i = 0; i < cSz; i++)
                 {
                     cudaMalloc(&colors[i], sz * sizeof(int));
-                    p_mc::cudaError(__FILE__, __LINE__);
+                    cudaCheckError(); //p_mc::cudaError(__FILE__, __LINE__);
                     colors_[i].reset(colors[i], cudaFree);
                     //colors_[i] = std::make_shared<int>(colors[i], cudaFree);
                     cudaMalloc(&t_size[i], sizeof(int));
-                    p_mc::cudaError(__FILE__, __LINE__);
+                    cudaCheckError(); //p_mc::cudaError(__FILE__, __LINE__);
                     cudaMemset(t_size[i], 0, sizeof(int));
                     t_size_[i].reset(t_size[i], cudaFree);
                 }
@@ -147,7 +147,7 @@ namespace p_mc {
 
         /// <summary>
         /// Classify faces accroding to color, i.e. it counts how many faces
-        /// has a certain color. It requires halfedge data structure to find 
+        /// has a certain color. It requires halfedge data structure to find
         /// neighbor faces and check for equal colors.
         /// </summary>
         /// <param name="q">quadrilateral faces</param>

@@ -127,8 +127,8 @@ namespace p_mc {
         }
         /// <summary>
         /// Save edge into hash table and simultaneously save the index of
-        /// the face sharing this edge. It might give one face for a boundary 
-        /// edge, two for inner edges and four faces shareing the edge, if it
+        /// the face sharing this edge. It might give one face for a boundary
+        /// edge, two for inner edges and four faces shearing the edge, if it
         /// is the non-manifold case.
         /// </summary>
         /// <param name="v0">vertex index</param>
@@ -224,7 +224,7 @@ namespace p_mc {
         __device__ int v1(const int pos) { return edge[pos].y; }
         /// compute number of faces incident to edge v0,v1
         __device__ int nrFaces(const int pos)
-        {   
+        {
             return nr_face[pos];
         }
         /// <summary>
@@ -237,7 +237,7 @@ namespace p_mc {
         __device__ int f2(const int pos) { return face[4*pos + 2]; }
         __device__ int f3(const int pos) { return face[4*pos + 3]; }
         /// <summary>
-        /// Host method to read edges from hash table in device. 
+        /// Host method to read edges from hash table in device.
         /// Each edge consists of the two indices of the end vertices.
         /// </summary>
         /// <param name="e"></param>

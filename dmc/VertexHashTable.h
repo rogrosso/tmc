@@ -12,7 +12,7 @@
 
 namespace p_mc {
     /// <summary>
-    /// Hash table to construct a shared vertex triangle mesh using the 
+    /// Hash table to construct a shared vertex triangle mesh using the
     /// standard Marching Cubes algorithms. Triangles are also constructed
     /// for rendering purposes.
     /// </summary>
@@ -59,7 +59,7 @@ namespace p_mc {
         /// simple hash function
         __device__ int hash(const int k)
         {
-            return ((3 * k) % 300000007) % t_size;
+            return ((3ll * static_cast<unsigned long long>(k)) % 300000007ll) % t_size;
         }
         /// a bit mix hash function
         __device__ uint hash_function(uint key)
@@ -88,12 +88,13 @@ namespace p_mc {
                 //if (old == EMPTY_BUCKET_32 || old == k)
                 if (old == EMPTY_BUCKET_32)
                 {
-                    // vertex has to be created or it already exists, return address in field
+                    // vertex has to be created, return bucket address in field
                     addr[pos] = h;
                     return false;
                 }
                 else if (old == k)
                 {
+                    // vertex already exists, return bucket address for this key
                     addr[pos] = h;
                     return true;
                 }

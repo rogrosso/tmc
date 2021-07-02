@@ -8,7 +8,7 @@
 #include <device_launch_parameters.h>
 
 // Project files
-//#include "helper_cuda.h"
+//#include "c_mc/helper_cuda.h"
 #include "helper_cuda.h"
 #include "CTimer.h"
 #include "Quadrilaterals.h"
@@ -21,20 +21,20 @@
 
 namespace p_mc {
     /// <summary>
-    /// Construct a halfedge data structure from a 
+    /// Construct a halfedge data structure from a
     /// shared vertex mesh
     /// </summary>
     struct HalfedgeMesh {
         using uint = unsigned int;
         /// <summary>
-        /// Collect edges from a quadrilateral mesh and store them 
+        /// Collect edges from a quadrilateral mesh and store them
         /// into a hash table for further processing.
         /// </summary>
         /// <param name="q">quadrilaterals</param>
         /// <param name="eht">hash table to store edges</param>
         void edgeHashTable(Quadrilaterals& q, EdgeHashTable& eht);
         /// <summary>
-        /// Computed unique edges from a shared vertex quadrilateral mesh
+        /// Compute unique edges from a shared vertex quadrilateral mesh
         /// </summary>
         /// <param name="q">quadrilateral mesh</param>
         /// <param name="e">edges</param>
@@ -52,5 +52,11 @@ namespace p_mc {
         /// <param name="timer">timer to measure performance</param>
         /// <returns>number of halfedges in the mesh</returns>
         int halfedges(const int nr_v, Quadrilaterals& q, Halfedges& he, HalfedgeFaces& f, HalfedgeVertices& v, CTimer& timer);
+        /// <summary>
+        /// Computes the number of non-manifold edges
+        /// </summary>
+        /// <param name="q">quadrilaterals in a shared vertex data structure</param>
+        /// <returns></returns>
+        int nonManifold(Quadrilaterals& q);
     };
 } // namespace p_mc

@@ -2,6 +2,7 @@
 
 // C++ libs
 #include <memory>
+#include <vector>
 
 // CUDA stuff
 #include <cuda_runtime.h>
@@ -17,7 +18,7 @@ namespace p_mc {
     struct HalfedgeVertices {
         /// total number of vertices
         int nr_v;
-        /// index buffer, contains index of 
+        /// index buffer, contains index of
         /// halfedge starting at vertex
         int* he_e{ nullptr };
         std::shared_ptr<int> he_e_{ nullptr };

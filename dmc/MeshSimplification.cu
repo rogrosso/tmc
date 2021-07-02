@@ -3,7 +3,7 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-//      GLOBAL (Kernels) 
+//      GLOBAL (Kernels)
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -199,10 +199,8 @@ __global__ void merge_vertices_P3X3Y(p_mc::Quadrilaterals q_, p_mc::VertexMap m_
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // merge vertices baesd on element color
-// - if two elements with the pattern 3-X-3-Y are neighbors, they cannot be removed, this is indicated by count, count > 1 means more than
-//   one element are sharering a vertex of valence 3
-// - if the element can be removed, move the vertices with valence 3 to the midpoint of the line connecting the other two vertices
-//   e.g. one can allways move the element v0 (valence(v0) = 3) or v1 (valence v1 = 3)
+// - Color based simplification: if one neighbor have same vertex valence patter but a higher color, the element can be removed
+// - If one neighbor have the same vertex valence pattern and a smaller color, the element cannot be removed
 __global__ void merge_vertices_P3X3Y_color(p_mc::Quadrilaterals q_, p_mc::VertexMap vm_, p_mc::Vertices v_, p_mc::Halfedges e_, p_mc::HalfedgeFaces f_)
 {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -300,13 +298,13 @@ __global__ void merge_vertices_P3X3Y_color(p_mc::Quadrilaterals q_, p_mc::Vertex
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// new vertices 
+// new vertices
 __global__ void remove_vertices_P3X3Y(const int nr_v, p_mc::Vertices v_, p_mc::VertexMap m_, p_mc::Vertices n_)
 {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nr_v)
         return;
-    // 
+    //
     if (m_.type[tid] != p_mc::P_REMOVE) {
         // copy vertex to new list
         const int addr = atomicAdd(n_.t_size, 1);
@@ -327,7 +325,7 @@ __global__ void remove_quadrilaterals_P3X3Y(p_mc::Quadrilaterals q_, p_mc::Verte
     if (tid >= q_.nr_q) return;
     // check if quadrilateral has to be removed
     if (q_.isRemove(tid)) return; // element is removed from the list
-    
+
     // compute new quadrilateral
     const int v0 = q_.quadrilaterals[tid].x;
     const int v1 = q_.quadrilaterals[tid].y;
@@ -377,24 +375,28 @@ __global__ void mark_elements_P3333(p_mc::HalfedgeFaces q_, p_mc::Halfedges he_,
     // find element neighbors
     // f0
     int twin = he_.he_e[e0].w;
+    if (twin == -1) return; // boundary element
     const int f0 = he_.he_e[twin].y;
     int next = he_.he_e[twin].z;
     next = he_.he_e[next].z;
     const int v4 = he_.he_e[next].x;
     // f1
     twin = he_.he_e[e1].w;
+    if (twin == -1) return; // boundary element
     const int f1 = he_.he_e[twin].y;
     next = he_.he_e[twin].z;
     next = he_.he_e[next].z;
     const int v5 = he_.he_e[next].x;
     // f2
     twin = he_.he_e[e2].w;
+    if (twin == -1) return; // boundary element
     const int f2 = he_.he_e[twin].y;
     next = he_.he_e[twin].z;
     next = he_.he_e[next].z;
     const int v6 = he_.he_e[next].x;
     // f3
     twin = he_.he_e[e3].w;
+    if (twin == -1) return; // boundary element
     const int f3 = he_.he_e[twin].y;
     next = he_.he_e[twin].z;
     next = he_.he_e[next].z;
@@ -428,7 +430,7 @@ __global__ void mark_elements_P3333(p_mc::HalfedgeFaces q_, p_mc::Halfedges he_,
         // element can't be removed
         return;
     }
-    // check for special case, where removing element would 
+    // check for special case, where removing element would
     // generate a non-manifold mesh
     if (valence4 == 4 && valence5 == 4 && valence6 == 4 && valence7 == 4) {
         return;
@@ -461,7 +463,7 @@ __global__ void remove_vertices_P3333(p_mc::Vertices v_, p_mc::VertexMap vm_, p_
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= v_.nr_v) return;
     if (vm_.type[tid] == p_mc::P_3333) return;
-    
+
     const int addr = atomicAdd(n_.t_size, 1);
     n_.vertices[addr] = v_.vertices[tid];
     n_.normals[addr] = v_.normals[tid];
@@ -490,7 +492,7 @@ __global__ void remove_quadrilaterals_P3333(p_mc::Quadrilaterals q_, p_mc::Halfe
         nq_.z = vm_.map_addr[vm_.twin[v2]];
         nq_.w = vm_.map_addr[vm_.twin[v3]];
     }
-    else 
+    else
     {
         nq_.x = vm_.map_addr[v0];
         nq_.y = vm_.map_addr[v1];
@@ -559,13 +561,13 @@ void p_mc::MeshSimplification::pattern3X3Y(Vertices& v, Quadrilaterals& q, Halfe
     cudaCheckError();
     // measure time
     timer.stop();
-    // copy data back 
+    // copy data back
     q.copy(nq);
     v.copy(nv);
     // re-compute halfedge data structure
-    HalfedgeMesh hm;
-    CTimer t;
-    hm.halfedges(v.size(), q, he, hef, hev, t);
+    //HalfedgeMesh hm;
+    //CTimer t;
+    //hm.halfedges(v.size(), q, he, hef, hev, t);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Simplify elements with valence pattern 3X3Y
@@ -614,13 +616,13 @@ void p_mc::MeshSimplification::pattern3X3YOld(Vertices& v, Quadrilaterals& q, Ha
     cudaCheckError();
     // measure time
     timer.stop();
-    // copy data back 
+    // copy data back
     q.copy(nq);
     v.copy(nv);
     // re-compute halfedge data structure
-    HalfedgeMesh hm;
-    CTimer t;
-    hm.halfedges(v.size(), q, he, hef, hev, t);
+    //HalfedgeMesh hm;
+    //CTimer t;
+    //hm.halfedges(v.size(), q, he, hef, hev, t);
 }
 void p_mc::MeshSimplification::pattern3333(Vertices& v, Quadrilaterals& q, Halfedges& he, HalfedgeFaces& hef, HalfedgeVertices& hev, CTimer& timer)
 {
@@ -662,12 +664,7 @@ void p_mc::MeshSimplification::pattern3333(Vertices& v, Quadrilaterals& q, Halfe
     // measure time
     timer.stop();
 
-    // copy data back 
+    // copy data back
     q.copy(nq);
     v.copy(nv);
-    // re-compute halfedge data structure
-    HalfedgeMesh hm;
-    CTimer t;
-    hm.halfedges(v.size(), q, he, hef, hev, t);
-    
 }

@@ -22,6 +22,15 @@
 #include "HalfedgeMesh.h"
 #include "MeshSimplification.h"
 #include "FaceColoring.h"
+#include "EstimateElementQuality.h"
+#include "VertexValence.h"
+
+// Thrust
+#include <thrust/device_vector.h>
+#include <thrust/extrema.h>
+#include <thrust/execution_policy.h>
+
+
 
 // type aliases
 // Introduce convenient aliases here
@@ -44,7 +53,7 @@ using UGrid = p_mc::DualMarchingCubes::UGrid;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //      Compute Element Quality and Generate best triangle mesh out of a quadrilateral mesh
-//      Use the MaxMin angle criterium
+//      Use the MaxMin angle criterion
 //      Compute triangle angles based on cosine rule
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -77,11 +86,12 @@ __global__ void quadrilateral_to_triangle(Quadrilaterals q_, Vertices v_, Triang
         t_.addTriangle(2 * tid, v1, v3, v0);
         t_.addTriangle(2 * tid + 1, v1, v2, v3);
     }
-    else 
+    else
     {
         t_.addTriangle(2 * tid, v0, v1, v2);
         t_.addTriangle(2 * tid + 1, v0, v2, v3);
     }
+    atomicAdd(t_.t_size, 2);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,12 +108,12 @@ __global__ void mean_ratio_measure(Triangles t_, Vertices v_, QualityMeasure q_)
     const float3 p0 = v_.vertices[v0];
     const float3 p1 = v_.vertices[v1];
     const float3 p2 = v_.vertices[v2];
-    // compute quality measure
+    // compute mean ratio quality measure
     q_.mean_ratio(tid, p0, p1, p2);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// init hash table for quadrilaterals
+// initialize hash table for quadrilaterals
 __global__ void init_quadrilateral_hashtable(QuadrilateralHashTable ht_)
 {
 	const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -112,22 +122,13 @@ __global__ void init_quadrilateral_hashtable(QuadrilateralHashTable ht_)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// init hash table for vertices, this is a redundant data structure, just to differentiate
+// initialize hash table for vertices, this is a redundant data structure, just to differentiate
 __global__ void init_vertex_hashtable(VertexHashTable ht_)
 {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= ht_.t_size) return;
     ht_.init(tid);
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// init hash table for halfedges
-//__global__ void init_halfedge_hashtable(HalfedgeHashTable ht_)
-//{
-//    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-//    if (tid >= ht_.t_size) return;
-//    ht_.init(tid);
-//}
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -136,11 +137,56 @@ __global__ void init_vertex_hashtable(VertexHashTable ht_)
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// count number of vertices, which is used later to estimate number of faces and allocate memory for buffers
+__global__ void count_dmc(const float i0, const uint t_size, UGrid ugrid, CellIntersection c_, int* aCnt)
+{
+    // use a 1d grid
+    const int gl_index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t_size <= gl_index)
+        return;
+
+    const int i_index = ugrid.i_index(gl_index);
+    const int j_index = ugrid.j_index(gl_index);
+    const int k_index = ugrid.k_index(gl_index);
+    if (i_index >= (ugrid.idim - 1) || j_index >= (ugrid.jdim - 1) || k_index >= (ugrid.kdim - 1))
+    {
+        return;
+    }
+
+    // scalar values at vertices
+    float u[8];
+    u[0] = ugrid(i_index, j_index, k_index);
+    u[1] = ugrid(i_index + 1, j_index, k_index);
+    u[2] = ugrid(i_index, j_index + 1, k_index);
+    u[3] = ugrid(i_index + 1, j_index + 1, k_index);
+    u[4] = ugrid(i_index, j_index, k_index + 1);
+    u[5] = ugrid(i_index + 1, j_index, k_index + 1);
+    u[6] = ugrid(i_index, j_index + 1, k_index + 1);
+    u[7] = ugrid(i_index + 1, j_index + 1, k_index + 1);
+
+    //
+    uchar i_case{ 0 };
+    i_case = i_case + ((uint)(u[0] >= i0));
+    i_case = i_case + ((uint)(u[1] >= i0)) * 2;
+    i_case = i_case + ((uint)(u[2] >= i0)) * 4;
+    i_case = i_case + ((uint)(u[3] >= i0)) * 8;
+    i_case = i_case + ((uint)(u[4] >= i0)) * 16;
+    i_case = i_case + ((uint)(u[5] >= i0)) * 32;
+    i_case = i_case + ((uint)(u[6] >= i0)) * 64;
+    i_case = i_case + ((uint)(u[7] >= i0)) * 128;
+
+    if (i_case == 0 || i_case == 255)
+        return;
+    // intersect cell
+    int nr_v = c_.countMCPolygons(i0, i_case, u);
+    if (nr_v > 0) atomicAdd(aCnt, nr_v);
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Hybrid version
 //  - ambiguous cases are processed without lookup table
-//  - unambiguous case are processed with the standard mc
+//  - unambiguous cases are processed with the lookup table containing the MC polygons
 __global__ void dual_mc(const float i0, const uint t_size, UGrid ugrid, CellIntersection c_, QuadrilateralHashTable ht_, Vertices v_)
 {
     // use a 1d grid
@@ -155,7 +201,7 @@ __global__ void dual_mc(const float i0, const uint t_size, UGrid ugrid, CellInte
     {
         return;
     }
-    
+
     // scalar values at vertices
     float u[8];
     u[0] = ugrid(i_index, j_index, k_index);
@@ -167,7 +213,7 @@ __global__ void dual_mc(const float i0, const uint t_size, UGrid ugrid, CellInte
     u[6] = ugrid(i_index, j_index + 1, k_index + 1);
     u[7] = ugrid(i_index + 1, j_index + 1, k_index + 1);
 
-    // 
+    //
     uchar i_case{ 0 };
     i_case = i_case + ((uint)(u[0] >= i0));
     i_case = i_case + ((uint)(u[1] >= i0)) * 2;
@@ -181,9 +227,9 @@ __global__ void dual_mc(const float i0, const uint t_size, UGrid ugrid, CellInte
     if (i_case == 0 || i_case == 255)
         return;
     // intersect cell
-    //c_.slice(i0, i_case, i_index, j_index, k_index, u, ugrid, ht_, v_);
+    c_.slice(i0, i_case, i_index, j_index, k_index, u, ugrid, ht_, v_);
     //c_.sliceQ(i0, i_case, i_index, j_index, k_index, u, ugrid, ht_, v_);
-    c_.sliceP(i0, i_case, i_index, j_index, k_index, u, ugrid, ht_, v_);
+    //c_.sliceP(i0, i_case, i_index, j_index, k_index, u, ugrid, ht_, v_);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,6 +237,61 @@ __global__ void dual_mc(const float i0, const uint t_size, UGrid ugrid, CellInte
 //      Standard MARCHING CUBES
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// count number of triangles, use an atomic counter
+__global__ void count_mc(const float i0, const uint t_size, UGrid ugrid, MarchingCubesLookupTables l_tables, int* aCnt)
+{
+    // use a 1d grid
+    const int gl_index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (gl_index >= t_size)
+        return;
+
+    const int i_index = ugrid.i_index(gl_index);
+    const int j_index = ugrid.j_index(gl_index);
+    const int k_index = ugrid.k_index(gl_index);
+    if (i_index >= (ugrid.idim - 1) || j_index >= (ugrid.jdim - 1) || k_index >= (ugrid.kdim - 1))
+    {
+        return;
+    }
+
+    // scalar values at vertices
+    float u[8];
+    u[0] = ugrid(i_index, j_index, k_index);
+    u[1] = ugrid(i_index + 1, j_index, k_index);
+    u[2] = ugrid(i_index, j_index + 1, k_index);
+    u[3] = ugrid(i_index + 1, j_index + 1, k_index);
+    u[4] = ugrid(i_index, j_index, k_index + 1);
+    u[5] = ugrid(i_index + 1, j_index, k_index + 1);
+    u[6] = ugrid(i_index, j_index + 1, k_index + 1);
+    u[7] = ugrid(i_index + 1, j_index + 1, k_index + 1);
+
+    // compute case
+    uchar i_case{ 0 };
+    i_case = i_case + ((uint)(u[0] >= i0));
+    i_case = i_case + ((uint)(u[1] >= i0)) * 2;
+    i_case = i_case + ((uint)(u[2] >= i0)) * 4;
+    i_case = i_case + ((uint)(u[3] >= i0)) * 8;
+    i_case = i_case + ((uint)(u[4] >= i0)) * 16;
+    i_case = i_case + ((uint)(u[5] >= i0)) * 32;
+    i_case = i_case + ((uint)(u[6] >= i0)) * 64;
+    i_case = i_case + ((uint)(u[7] >= i0)) * 128;
+
+    if (i_case == 0 || i_case == 255)
+        return;
+
+    // count number of triangles
+    int nr_t{ 0 };
+    for (int t = 0; t < 16; t += 3)
+    {
+        const int index = i_case * 16 + t;
+        const int i0 = static_cast<int>(l_tables.t_pattern[index]);
+        if (i0 == -1)
+            break;
+        nr_t++;
+    }
+    if (nr_t > 0) atomicAdd(aCnt, nr_t);
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // standard marching cubes
@@ -233,18 +334,8 @@ __global__ void standard_mc(const float i0, const uint t_size, UGrid ugrid, Marc
 
     if (i_case == 0 || i_case == 255)
         return;
-    
+
     // compute cell intersection
-    // compute unique edge global index
-    auto e_glIndex = [](const int e, const int i_idx, const int j_idx, const int k_idx, UGrid& ugrid)
-    {
-        const unsigned long long gei_pattern_ = 670526590282893600ull;
-        const int i = i_idx + (int)((gei_pattern_ >> 5 * e) & 1); // global_edge_id[eg][0];
-        const int j = j_idx + (int)((gei_pattern_ >> (5 * e + 1)) & 1); // global_edge_id[eg][1];
-        const int k = k_idx + (int)((gei_pattern_ >> (5 * e + 2)) & 1); // global_edge_id[eg][2];
-        const int offs = (int)((gei_pattern_ >> (5 * e + 3)) & 3);
-        return (3 * ugrid.gl_index(i, j, k) + offs);
-    };
     // table listing end vertices of an edge
     const unsigned char l_edges_[12]{ 16, 49, 50, 32, 84, 117, 118, 100, 64, 81, 115, 98 };
     const ushort e_ = l_tables.e_pattern[i_case];
@@ -254,23 +345,29 @@ __global__ void standard_mc(const float i0, const uint t_size, UGrid ugrid, Marc
     int v_addr[12];
     for (int e = 0; e < 12; e++)
     {
+        v_addr[e] = -1;
         if (flag & e_)
         {
-            const int e_id = e_glIndex(e, i_index, j_index, k_index, ugrid);
+            const int e_id = ugrid.e_glIndex(e, i_index, j_index, k_index);
             // check if vertex was already generated
             const bool v_flag = ht_.addVertex(e_id, v_addr, e);
-            if (!v_flag) {
-                // create vertex 
+            if (!v_flag)
+            {
+                // create vertex
                 const int v0 = (l_edges_[e] & 0xF);
                 const int v1 = (l_edges_[e] >> 4) & 0xF;
                 const float l = (i0 - u[v0]) / (u[v1] - u[v0]);
-                const float3 vt0{ ugrid.x0 + (i_index + (v0 & 0x1)) * ugrid.dx, ugrid.y0 + (j_index + ((v0 & 0x2) >> 1)) * ugrid.dy, ugrid.z0 + (k_index + ((v0 & 0x4) >> 2)) * ugrid.dz };
-                const float3 vt1{ ugrid.x0 + (i_index + (v1 & 0x1)) * ugrid.dx, ugrid.y0 + (j_index + ((v1 & 0x2) >> 1)) * ugrid.dy, ugrid.z0 + (k_index + ((v1 & 0x4) >> 2)) * ugrid.dz };
+                const float x0 = ugrid.x0 + (i_index + (v0 & 0x1)) * ugrid.dx;
+                const float y0 = ugrid.y0 + (j_index + ((v0 & 0x2) >> 1)) * ugrid.dy;
+                const float z0 = ugrid.z0 + (k_index + ((v0 & 0x4) >> 2)) * ugrid.dz;
+                const float x1 = ugrid.x0 + (i_index + (v1 & 0x1)) * ugrid.dx;
+                const float y1 = ugrid.y0 + (j_index + ((v1 & 0x2) >> 1)) * ugrid.dy;
+                const float z1 = ugrid.z0 + (k_index + ((v1 & 0x4) >> 2)) * ugrid.dz;
                 float3 ei = make_float3(0, 0, 0);
                 float3 ni = make_float3(0, 0, 0);
-                ei.x = vt0.x + l * (vt1.x - vt0.x);
-                ei.y = vt0.y + l * (vt1.y - vt0.y);
-                ei.z = vt0.z + l * (vt1.z - vt0.z);
+                ei.x = x0 + l * (x1 - x0);
+                ei.y = y0 + l * (y1 - y0);
+                ei.z = z0 + l * (z1 - z0);
                 ni.x = n[v0].x + l * (n[v1].x - n[v0].x);
                 ni.y = n[v0].y + l * (n[v1].y - n[v0].y);
                 ni.z = n[v0].z + l * (n[v1].z - n[v0].z);
@@ -287,16 +384,17 @@ __global__ void standard_mc(const float i0, const uint t_size, UGrid ugrid, Marc
         flag <<= 1;
     }
     // construct triangles
-    char* t_pattern = &l_tables.t_pattern[ 16 * i_case ];
     for (int t = 0; t < 16; t += 3)
     {
-        if (t_pattern[t] == -1)
+        const int index = i_case * 16 + t;
+        const int i0 = static_cast<int>(l_tables.t_pattern[index]);
+        const int i1 = static_cast<int>(l_tables.t_pattern[index + 1]);
+        const int i2 = static_cast<int>(l_tables.t_pattern[index + 2]);
+        if (i0 == -1)
             break;
         // add triangle to list
-        const int v0 = v_addr[static_cast<int>(t_pattern[t])];
-        const int v1 = v_addr[static_cast<int>(t_pattern[t+1])];
-        const int v2 = v_addr[static_cast<int>(t_pattern[t+2])];
-        t_.addTriangle(v0, v1, v2);
+        t_.addTriangle(v_addr[i0], v_addr[i1], v_addr[i2]);
+        //t_.addTriangle(ht_.v(v_addr[i0]), ht_.v(v_addr[i1]), ht_.v(v_addr[i2]));
     }
 }
 
@@ -340,7 +438,7 @@ __global__ void map_quadrilaterals(QuadrilateralHashTable ht_, Quadrilaterals q_
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // color elements, inherit coloring from uniform grid, a coloring with 5 colors is always possible
 // This method works, because the quad mesh has already a consistent coloring inherited from the uniform grid,
-// that is, neighbors have a color different from c. 
+// that is, neighbors have a color different from c.
 __global__ void color_quadrilaterals(Quadrilaterals q_, Halfedges he_, HalfedgeFaces he_f, int c)
 {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -465,6 +563,55 @@ __global__ void transfer_face_attributes(Quadrilaterals q_, HalfedgeFaces he_f)
     if (tid >= q_.nr_q) return;
     he_f.attributes[tid] = q_.attributes[tid];
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// mark vertices used by quadrilaterals
+__global__ void count_unused_vertices(Quadrilaterals q_, bool* flag)
+{
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= q_.nr_q) return;
+    flag[q_.v0(tid)] = true;
+    flag[q_.v1(tid)] = true;
+    flag[q_.v2(tid)] = true;
+    flag[q_.v3(tid)] = true;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// mark vertices used by quadrilaterals
+__global__ void remove_unused_vertices(Vertices v_, Vertices nv_, bool* flag, int* map_)
+{
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= v_.nr_v) return;
+    if (flag[tid])
+    {
+        const int addr = nv_.addVertex(v_.vertices[tid], v_.normals[tid]);
+        map_[tid] = addr;
+    }
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// mark vertices used by quadrilaterals
+__global__ void remap_quad_indices(Quadrilaterals q_, int* map_)
+{
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= q_.nr_q) return;
+    int index = q_.v0(tid);
+    q_.quadrilaterals[tid].x = map_[index];
+    index = q_.v1(tid);
+    q_.quadrilaterals[tid].y = map_[index];
+    index = q_.v2(tid);
+    q_.quadrilaterals[tid].z = map_[index];
+    index = q_.v3(tid);
+    q_.quadrilaterals[tid].w = map_[index];
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// copy from vertices to thrust vectors
+__global__ void copy_vertex_coordinates(Vertices v_, float* x_, float* y_, float* z_)
+{
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= v_.nr_v) return;
+    x_[tid] = v_.x(tid);
+    y_[tid] = v_.y(tid);
+    z_[tid] = v_.z(tid);
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -479,9 +626,47 @@ __global__ void transfer_face_attributes(Quadrilaterals q_, HalfedgeFaces he_f)
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// remove unused vertices
+void removeUnusedVertices(p_mc::Vertices& v_, p_mc::Quadrilaterals& q_)
+{
+    const int nr_v = v_.size();
+    const int nr_q = q_.size();
+    p_mc::Vertices nv_(nr_v);
 
-/// compute valence
-void checkVertexValence(p_mc::Vertices v, p_mc::Quadrilaterals q, std::string const& step)
+    // set flag for used vertices
+    bool* flag{ nullptr };
+    cudaMalloc(&flag, nr_v * sizeof(bool));
+    p_mc::cudaCheckError();
+    cudaMemset(flag, false, nr_v * sizeof(bool));
+    p_mc::cudaCheckError();
+    int* map_{ nullptr };
+    cudaMalloc(&map_, nr_v * sizeof(int));
+    p_mc::cudaCheckError();
+    cudaMemset(map_, INVALID_INDEX, nr_v * sizeof(int));
+    // count unused vertices
+    int b_size = MC_BLOCKSIZE;
+    int g_size = (nr_q + b_size - 1) / b_size;
+    count_unused_vertices << < g_size, b_size >> > (q_, flag);
+    cudaDeviceSynchronize();
+    p_mc::cudaCheckError();
+    // remove unused vertices
+    g_size = (nr_v + b_size - 1) / b_size;
+    remove_unused_vertices << <g_size, b_size >> > (v_, nv_, flag, map_);
+    // remap indices
+    g_size = (nr_q + b_size - 1) / b_size;
+    remap_quad_indices << < g_size, b_size >> > (q_, map_);
+    // copy vertices back to input array
+    v_.copy(nv_);
+    // free memory
+    cudaFree(flag);
+    cudaFree(map_);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// compute vertex valence distribution to check mesh quality
+/// this function is used for measurement purposes
+void checkVertexValence(p_mc::Vertices v, p_mc::Quadrilaterals q, std::vector<int>& valenceDist)
 {
     /// data
     p_mc::HalfedgeMesh hm;
@@ -493,10 +678,10 @@ void checkVertexValence(p_mc::Vertices v, p_mc::Quadrilaterals q, std::string co
     std::vector<int> nrF;
     eht.getEdges(le);
     eht.getNrFaces(nrF);
-    
+
     std::vector<int> valence(v.size(), 0);
     for (int i = 0; i < le.size(); i++)
-    {   
+    {
        if (nrF[i] > 0)
         {
             valence[le[i].x] += 1;
@@ -504,32 +689,15 @@ void checkVertexValence(p_mc::Vertices v, p_mc::Quadrilaterals q, std::string co
         }
 
     }
-    // assume largest valence is 11
-    std::vector<int> valenceDist(12, 0);
+    // a unit cell has 12 edges
+    // if a single branch of the iso-surface
+    // intersects all edge, the max valence might be
+    // 12, consider also valence 0
+    valenceDist.resize(13, 0);
     for (auto v : valence)
     {
-        if (v <= 11)
-        {
-            if (v == 0 || v == 1)
-            {
-                std::cout << "ERROR: valence : " << v << std::endl;
-            }
-            valenceDist[v] += 1;
-        }
-        else {
-            std::cout << "ERROR: valence larger than 11, valence: " << v << std::endl;
-        }
+        valenceDist[v] += 1;
     }
-    // write valence distribution to text file, accumulate
-    std::string o_file = "./data/measurements/valencedistirbution.txt";
-    std::ofstream of;
-    of.open(o_file, std::ios_base::app);
-    of << "new measure: " << step << std::endl;
-    for (auto v : valenceDist)
-    {
-        of << v << std::endl;
-    }
-    of.close();
 }
 
 
@@ -574,7 +742,7 @@ void checkMeshConsistency(p_mc::Vertices v, p_mc::Quadrilaterals q, std::string 
             break;
         }
     }
-    
+
     // print
     std::cout << " ... Mesh consistency" << std::endl;
     std::cout << " ... nr. boundary edges: " << nrBndEdges << std::endl;
@@ -616,18 +784,29 @@ void checkMeshConsistency(p_mc::Vertices v, p_mc::Quadrilaterals q, std::string 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Main function to process a volume data set
-void 
-p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string,int>& config)
+// Dual Marching Cubes
+void
+p_mc::DualMarchingCubes::dualMC(const float i0,
+    std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<Triangle>& t, std::vector<Quadrilateral>& q,
+    std::vector<Halfedge>& o_he, std::vector<HalfedgeFace>& o_hef, std::vector<HalfedgeVertex>& o_hev,
+    std::map<std::string, int>& config)
 {
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// config
+    // CUDA
+    uint b_size{ 0 };
+    uint g_size{ 0 };
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // configuration
     bool valenceFlag{ static_cast<bool>(config["valence"]) };
+    bool elementQualityFlag{ static_cast<bool>(config["element-quality"]) };
     bool p3X3YColor{ static_cast<bool>(config["p3X3YColor"]) };
     bool p3X3YOld{ static_cast<bool>(config["p3X3YOld"]) };
     bool p3333{ static_cast<bool>(config["p3333"]) };
-    bool elementQuality{ static_cast<bool>(config["elementQuality"]) };
-    bool objFlag{ static_cast<bool>(config["objFile"]) };
+    bool heDataStructure{ static_cast<bool>(config["halfedge-datastructure"]) };
+    bool countNonManifolEdges{ static_cast<bool>(config["non-manifold"]) };
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Problem size
+    addElementsInfo(i0);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Problem size
@@ -639,7 +818,7 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// processing time
-    std::cout << " ... compute isosurface\n";
+    std::cout << " ... compute iso-surface\n";
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// compute quadrilaterals
@@ -650,32 +829,53 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// 0. Cell intersection object
     CellIntersection c_(r_pattern, t_ambig);
-    cudaCheckError();
 
-    // 1. alloc and init hash table
-	const int ht_size = static_cast<int>(20e6);
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Count number of vertices, which can be used to estimate the number of elements
+    ctimer.start();
+    int* aCnt{ nullptr };
+    cudaMalloc(&aCnt, sizeof(int));
+    cudaMemset(aCnt, 0, sizeof(int));
+    b_size = MC_BLOCKSIZE;
+    g_size = (t_size + b_size - 1) / b_size;
+    count_dmc << < g_size, b_size >> > (i0, t_size, ugrid, c_, aCnt);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    int nrVerts{ 0 };
+    cudaMemcpy(&nrVerts, aCnt, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaCheckError();
+    ctimer.stop();
+    std::cout << " ... nr. of estimated vertices " << nrVerts << ", in " << ctimer.getTime() << " ms" << std::endl;
+
+    // We assume there will give a maximum of 15e6 of vertices
+    // Hash tables should used the 70% rule of thumb, i.e. multiply size by 100/70
+    const int vBuffSize = static_cast<int>(nrVerts); // max number of vertices
+    const int qBuffSize = static_cast<int>(1.2 * nrVerts); // assume there will give almost the same nr. of quads as vertices
+    const int htBuffSize = static_cast<int>(100. / 70. * qBuffSize);
+    // 1. allocate and initialize hash table
+	const int ht_size = static_cast<int>(htBuffSize);
     QuadrilateralHashTable ht_(ht_size);
 	//cudaCheckError();
-	uint b_size = MC_BLOCKSIZE;
-	uint g_size{ (static_cast<uint>(ht_.size()) + b_size - 1) / b_size };
+	b_size = MC_BLOCKSIZE;
+	g_size = (static_cast<uint>(ht_.size()) + b_size - 1) / b_size;
 	init_quadrilateral_hashtable << < g_size, b_size >> > (ht_);
     cudaDeviceSynchronize();
 	cudaCheckError();
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// 2. alloc and init vertices
+	// 2. allocate and initialize vertices
     int nr_v{ 0 };
-    Vertices v_(15e6);
+    Vertices v_(vBuffSize);
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// 3. alloc and init quadrilaterals
+	// 3. allocate and initialize quadrilaterals
     int nr_q{ 0 };
-    Quadrilaterals q_(15e6);
+    Quadrilaterals q_(qBuffSize);
     cudaDeviceSynchronize();
 	cudaCheckError();
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// 4. compute iso-surface 
+	// 4. compute iso-surface
     ctimer.start();
 	b_size = MC_BLOCKSIZE;
 	g_size = (t_size + b_size - 1) / b_size;
@@ -683,8 +883,6 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
 	cudaDeviceSynchronize();
     cudaCheckError();
 
-
-	
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// 5. compute shared vertex list for quadrilateral mesh
 	// indices of quadrilateral vertices have to be mapped to global vertex index in vertex array
@@ -695,7 +893,7 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
         std::cout << " ERROR: no vertices\n";
         return;
     }
-	
+
 	// map quadrilateral indices
 	b_size = MC_BLOCKSIZE;
 	g_size = (ht_.size() + b_size - 1) / b_size;
@@ -704,35 +902,48 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
     cudaCheckError();
 	// get number of quadrilaterals
 	nr_q = q_.size();
-    
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// compute processing time
-	ctimer.stop();
-    ctimer.print(std::string("dual marching cubes and indexed face set"));
-    timesMC.push_back(ctimer.getTime(std::string("Dual MC ")));
-        
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Generate halfedge data structure
+    // compute processing time
+    ctimer.stop();
+    addTimeInfo(TimeInfo::TimeDMC, ctimer.getTime());
+    std::cout << " ... DMC processing time: " << ctimer.getTime() << std::endl;
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // remove unused vertices
+    removeUnusedVertices(v_, q_);
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // output number of elements
+    addElementsInfo(ElementsInfo::ElementsDMC, nr_v, nr_q);
+
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Require halfedge data structure
     HalfedgeHashTable et_;
     Halfedges he_;
     HalfedgeFaces he_f;
     HalfedgeVertices he_v;
     HalfedgeMesh he_m;
-    
-    // compute halfedge mesh data structure
-    int nr_e = he_m.halfedges(nr_v, q_, he_, he_f, he_v, ctimer);
-    ctimer.print(std::string("halfedge data structure"));
-    timesHE.push_back(ctimer.getTime(std::string("HE MC ")));
-    
-    std::cout << " ... elements generated by dual mc" << std::endl;
-    std::cout << " ... total nr. of vertices " << nr_v << std::endl;
-    std::cout << " ... total nr. of quadrilaterals " << nr_q << std::endl;
-    // check vertex valence distribution
-    if (valenceFlag)
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Mesh properties: count number of non-manifold edges
+    if (countNonManifolEdges)
     {
-        checkVertexValence(v_, q_, std::string(" ... dual MC"));
+        const int nrNonManifoldEdges = he_m.nonManifold(q_);
+        addElementsInfo(ElementsInfo::ElementsNonManifoldEdges, nrNonManifoldEdges);
     }
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // compute number of failed back projections
+    nrFailedProjections1 = static_cast<int>(c_.failedProjections1());
+    addElementsInfo(ElementsInfo::ElementsFailedProjections1, nrFailedProjections1);
+    nrFailedProjections2 = static_cast<int>(c_.failedProjections2());
+    addElementsInfo(ElementsInfo::ElementsFailedProjections2, nrFailedProjections2);
+    std::cout << " ... number of failed projections at level 1: " << nrFailedProjections1 << std::endl;
+    std::cout << " ... number of failed projections at level 2: " << nrFailedProjections2 << std::endl;
+    // compute halfedge mesh data structure, processing time is measured within the method
+    int nr_e = he_m.halfedges(nr_v, q_, he_, he_f, he_v, ctimer);
+    addTimeInfo(TimeInfo::TimeHE, ctimer.getTime());
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Check face coloring method
@@ -740,74 +951,88 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
     FaceColoring fc;
     fc.colorFaces(q_, he_, he_f, ctimer);
     ctimer.stop();
-    ctimer.print(std::string(" compute face coloring"));
-    timesColoring.push_back(ctimer.getTime(std::string("Face Colring ")));
+    addTimeInfo(TimeInfo::TimeFaceColoring, ctimer.getTime());
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Copy all attributes of quadrilaterals to halfedge faces
     g_size = q_.size();
     transfer_face_attributes << < g_size, b_size >> > (q_, he_f);
     cudaDeviceSynchronize();
     cudaCheckError();
-    
-    /// check mesh
-    //checkMeshConsistency(v_, q_, std::string( " ... coloring" ));
-    
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Needs methods in this object for mesh quality measure
+    VertexValence vValence;
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Compute the distribution of vertex valence for the DMC mesh
+    if (valenceFlag)
+    {
+        //checkVertexValence(v_, q_, valenceDistDMC);
+        vValence.vertexValence(nr_v, q_, valenceDistDMC);
+    }
+
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Remove elements with valence pattern 3-x-3-y and 3-3-3-3
     MeshSimplification ms;
     if (p3X3YColor)
     {
-        std::cout << " ... start mesh simplification 3X3Y" << std::endl;
+        std::cout << " ... start mesh simplification p3X3Y Color" << std::endl;
         ms.pattern3X3Y(v_, q_, he_, he_f, he_v, ctimer);
-        ctimer.print(std::string(" simplification 3X3Y color based"));
-        times3X3Y.push_back(ctimer.getTime(std::string("P3X3Y color based ")));
-        /// check mesh
-        //checkMeshConsistency(v_, q_, std::string(" ... color based P3X3Y"));
+        addTimeInfo(TimeInfo::TimeP3X3YColor, ctimer.getTime());
+        // re-compute halfedge data structure
+        he_m.halfedges(v_.size(), q_, he_, he_f, he_v, ctimer);
+        /// compute number of elements
         nr_v = v_.size();
         nr_q = q_.size();
-        std::cout << " ... nr. of vertices: " << nr_v << std::endl;
-        std::cout << " ... nr. of faces: " << nr_q << std::endl;
-        ///  check if vertex valence distribution has changed
+        addElementsInfo(ElementsInfo::ElementsP3X3YColor, nr_v, nr_q);
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Compute the distribution of vertex valence for the DMC mesh after P3X3YColor simplification
         if (valenceFlag)
         {
-            checkVertexValence(v_, q_, std::string(" ... P3X3Y color based"));
+            //checkVertexValence(v_, q_, valenceDistP3X3YColor);
+            vValence.vertexValence(nr_v, q_, valenceDistP3X3YColor);
         }
     }
     if (p3X3YOld)
     {
+        std::cout << " ... start mesh simplification P3X3Y Old" << std::endl;
         ms.pattern3X3YOld(v_, q_, he_, he_f, he_v, ctimer);
-        ctimer.print(std::string(" simplification 3X3Y old"));
-        times3X3Y.push_back(ctimer.getTime(std::string("P3X3Y old method ")));
-        /// check mesh
-        //checkMeshConsistency(v_, q_, std::string(" ... old P3X3Y"));
+        addTimeInfo(TimeInfo::TimeP3X3YOld, ctimer.getTime());
+        // re-compute halfedge data structure
+        he_m.halfedges(v_.size(), q_, he_, he_f, he_v, ctimer);
+        // compute number of elements
         nr_v = v_.size();
         nr_q = q_.size();
-        std::cout << " ... nr. of vertices: " << nr_v << std::endl;
-        std::cout << " ... nr. of faces: " << nr_q << std::endl;
-        ///  check if vertex valence distribution has changed
+        addElementsInfo(ElementsInfo::ElementsP3X3YOld, nr_v, nr_q);
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Compute the distribution of vertex valence for the DMC mesh after P3X3YOld simplification
         if (valenceFlag)
         {
-            checkVertexValence(v_, q_, std::string(" ... P3X3Y old method"));
+            //checkVertexValence(v_, q_, valenceDistP3X3YOld);
+            vValence.vertexValence(nr_v, q_, valenceDistP3X3YOld);
         }
     }
     if (p3333)
     {
         std::cout << " ... start mesh simplification 3333" << std::endl;
         ms.pattern3333(v_, q_, he_, he_f, he_v, ctimer);
-        ctimer.print(std::string(" simplification 3333"));
-        times3333.push_back(ctimer.getTime(std::string("P3333 ")));
-        //checkMeshConsistency(v_, q_, std::string(" ... P3333"));
+        addTimeInfo(TimeInfo::TimeP3333, ctimer.getTime());
+        // re-compute halfedge data structure
+        he_m.halfedges(v_.size(), q_, he_, he_f, he_v, ctimer);
         nr_v = v_.size();
         nr_q = q_.size();
-        std::cout << " ... nr. of vertices: " << nr_v << std::endl;
-        std::cout << " ... nr. of faces: " << nr_q << std::endl;
-        ///  check if vertex valence distribution has changed
+        addElementsInfo(ElementsInfo::ElementsP3333, nr_v, nr_q);
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Compute the distribution of vertex valence for the DMC mesh after P3333 simplification
         if (valenceFlag)
         {
-            checkVertexValence(v_, q_, std::string(" ... P3333"));
+            //checkVertexValence(v_, q_, valenceDistP3333);
+            vValence.vertexValence(nr_v, q_, valenceDistP3333);
         }
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Generate a triangle mesh by optimal subdivision of quadrilaterals into trinalges
+    // Generate a triangle mesh by optimal subdivision of quadrilaterals into triangles
     nr_v = v_.size();
     nr_q = q_.size();
     const int nr_t = 2 * nr_q;
@@ -816,7 +1041,24 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
     quadrilateral_to_triangle<<< g_size, b_size>>>(q_, v_, t_);
     cudaDeviceSynchronize();
     cudaCheckError();
-    t_.nr_t = nr_t;
+    if (valenceFlag)
+    {
+        //checkVertexValence(v_, q_, valenceDistP3333);
+        vValence.vertexValence(nr_v, t_, valenceDistTris);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Compute quality of elements, triangles and quadrilaterals
+    if (elementQualityFlag)
+    {
+        EstimateElementQuality eQ;
+        ElementQuality eQuads(nr_q);
+        ElementQuality eTris(nr_t);
+        eQ.q(v_, q_, eQuads);
+        eQ.q(v_, t_, eTris);
+        eQuads.getQuality(elementQualityQuads);
+        eTris.getQuality(elementQualityTris);
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generate edges from quadrilaterals, this is for rendering purposes
@@ -830,217 +1072,75 @@ p_mc::DualMarchingCubes::dualMC(const float i0, Mesh& mesh, std::map<std::string
     std::cout << " ... total nr. of triangles " << nr_t << std::endl;
     std::cout << " ... total nr. of edges " << nr_qe << std::endl;
 
-	// Copy data from device
-	// copy first elements
-    mesh.resizeQuadrilaterals(nr_q);
-    mesh.resizeTriangles(nr_t);
-    mesh.resizeLines(nr_qe);
-    cudaMemcpy(mesh.quadrilateralsData(), q_.quadrilaterals, nr_q * sizeof(int4), cudaMemcpyDeviceToHost);
-    cudaMemcpy(mesh.trianglesData(), t_.triangles, nr_t * sizeof(int3), cudaMemcpyDeviceToHost); 
-    cudaMemcpy(mesh.linesData(), qe_.edges, nr_qe * sizeof(int2), cudaMemcpyDeviceToHost); 
-
-  
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// copy vertices to mesh
-    // Note: vertices has to be copied, they are double in mesh and float in CUDA
-    mesh.resizeVertices(nr_v);
+	// create host mesh
+    v.resize(nr_v);
+    n.resize(nr_v);
+    t.resize(nr_t);
+    q.resize(nr_q);
+    // copy vertices and normalsData
     float3* v_array = new float3[nr_v];
     float3* n_array = new float3[nr_v];
     cudaMemcpy(v_array, v_.vertices, nr_v * sizeof(float3), cudaMemcpyDeviceToHost);
     cudaMemcpy(n_array, v_.normals, nr_v * sizeof(float3), cudaMemcpyDeviceToHost);
 	for (int id = 0; id < nr_v; id++) {
 		// copy vertices
-		Mesh::Vertex v{ v_array[id].x,v_array[id].y, v_array[id].z };
-		Mesh::Normal n{ -n_array[id].x, -n_array[id].y, -n_array[id].z };
-		mesh.addVertex(id, v, n);
-        const double rC = 202.0 / 255.0;
-        const double gC = 200.0 / 255.0;
-        const double bC = 201.0 / 255.0;
-        const double aC = 1.0;
-        Mesh::Attribute a{ rC,gC,bC,aC };
-        mesh.attribute(id, a);
+        v[id] = { v_array[id].x,v_array[id].y, v_array[id].z };
+        n[id] = { -n_array[id].x, -n_array[id].y, -n_array[id].z };
 	}
     delete[] v_array;
     delete[] n_array;
+    // copy mesh elements
+    cudaMemcpy(q.data(), q_.quadrilaterals, nr_q * sizeof(int4), cudaMemcpyDeviceToHost);
+    cudaMemcpy(t.data(), t_.triangles, nr_t * sizeof(int3), cudaMemcpyDeviceToHost);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // copy half edge data structure from device to host
-    nr_v = he_v.size(); // number of halfedge vertices 
-    nr_q = he_f.size(); // number of halfedge faces
-    nr_e = he_.size(); // number of halfedge edges
-    std::vector<int4> he_e_array;
-    std::vector<int> he_v_array;
-    std::vector<int> he_f_array;
-    std::vector<uchar> he_f_attributes;
-    he_.getHalfedges(he_e_array);
-    he_v.getHalfedgeVertices(he_v_array);
-    he_f.getHalfedgeFaces(he_f_array, he_f_attributes);
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // collect infos
-    //info = new float3[nr_v];
-    //cudaMemcpy(info, v_.error, nr_v * sizeof(float3), cudaMemcpyDeviceToHost);
-    //info_.reset(info);
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // copy face colors from quadrilaterals
-    //checkFaceColoring(he_e_array, he_f_array, he_f_attributes);
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Check halfedge data structure
-    //checkHalfedge(he_e_array, he_f_array, mesh);
-    
-    // compute elment quality
-    if (elementQuality)
+    if (heDataStructure)
     {
-        float* qm_data{ nullptr };
-        QualityMeasure m_(nr_t);
-        //allocQualityMeasure(m_, nr_t);
-        g_size = (static_cast<uint>(nr_t) + b_size - 1) / b_size;
-        mean_ratio_measure << < g_size, b_size >> > (t_, v_, m_);
-        // save quality measure data
-        qm_data = new float[nr_t];
-        cudaMemcpy(qm_data, m_.q_measure, nr_t * sizeof(float), cudaMemcpyDeviceToHost);
-        // write to file
-        std::ofstream o_file("./data/models/qualityDMC.bin", std::ofstream::binary);
-        o_file.write((char*)&nr_t, sizeof(int));
-        o_file.write((char*)qm_data, nr_t * sizeof(float));
-        o_file.close();
-        delete[] qm_data;
+        nr_v = he_v.size(); // number of halfedge vertices
+        nr_q = he_f.size(); // number of halfedge faces
+        nr_e = he_.size(); // number of halfedge edges
+        std::vector<int4> he_e_array;
+        he_.getHalfedges(he_e_array);
+        // copy to output data structure
+        o_he.resize(he_e_array.size());
+        for (size_t i = 0; i < he_e_array.size(); i++)
+        {
+            o_he[i][0] = he_e_array[i].x;
+            o_he[i][1] = he_e_array[i].y;
+            o_he[i][2] = he_e_array[i].z;
+            o_he[i][3] = he_e_array[i].w;
+        }
+        // get halfedge faces
+        std::vector<uchar> he_f_attributes;
+        he_f.getHalfedgeFaces(o_hef, he_f_attributes);
+        // get halfege Vertices
+        he_v.getHalfedgeVertices(o_hev);
     }
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // compute bounding box using thrust
+    /*thrust::device_vector<float> x(nr_v);
+    thrust::device_vector<float> y(nr_v);
+    thrust::device_vector<float> z(nr_v);
+    g_size = (static_cast<uint>(nr_v) + b_size - 1) / b_size;
+    copy_vertex_coordinates << <g_size, b_size >> > (v_,
+            thrust::raw_pointer_cast(x.data()),
+            thrust::raw_pointer_cast(y.data()),
+            thrust::raw_pointer_cast(z.data()));
+    using result_type = thrust::pair<thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator>;
+    result_type xMinMax = thrust::minmax_element(x.begin(), x.end());
+    result_type yMinMax = thrust::minmax_element(y.begin(), y.end());
+    result_type zMinMax = thrust::minmax_element(z.begin(), z.end());
+    float minX = *xMinMax.first; // x[xMinMax.first - x.begin()];
+    float maxX = *xMinMax.second;
+    float minY = *yMinMax.first;
+    float maxY = *yMinMax.second;
+    float minZ = *zMinMax.first;
+    float maxZ = *zMinMax.second;*/
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// done!
 	std::cout << " ... done\n";
-	
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// write off file
-    //objFlag = false;
-    if (objFlag) {
-        std::ofstream objF;
-        objF.open("./data/models/dualMC_result.obj");
-        if (!objF.is_open()) {
-            std::cout << "ERROR: can't open output file " << std::endl;
-        }
-        else {
-            objF << "#Dual Marching Cubes\n";
-            for (int i = 0; i < nr_v; i++)
-            {
-                Mesh::Vertex v = mesh.vertex(i);
-                Mesh::Attribute a = mesh.attribute(i);
-                objF << "v " << v[0] << " " << v[1] << " " << v[2] << " " << a[0] << " " << a[1] << " " << a[2] << std::endl;
-            }
-            for (auto n : mesh.getNormals())
-            {
-                objF << "vn " << n[0] << " " << n[1] << " " << n[2] << std::endl;
-            }
-            //for (auto t : mesh.getTriangles())
-            for (auto q : mesh.getQuadrilaterals())
-            {
-                //objF << "f " << (t[0] + 1) << "//" << (t[0] + 1) << " " << (t[1] + 1) << "//" << (t[1] + 1) << " " << (t[2] + 1) << "//" << (t[2] + 1) << std::endl;
-                objF << "f " << (q[0] + 1) << "//" << (q[0] + 1) << " " << (q[1] + 1) << "//" << (q[1] + 1) << " " << (q[2] + 1) << "//" << (q[2] + 1) << " " << (q[3] + 1) << "//" << (q[3] + 1) << std::endl;
-            }
-            objF.close();
-        }
-    }
-}
-
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// standard marching cubes
-void
-p_mc::DualMarchingCubes::standardMC(const float i0, Mesh& mesh)
-{
-    std::cout << " ... compute MC surface\n";
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Problem size
-    const int t_size = ugrid.t_size(); // dims[0] * dims[1] * dims[2];
-    // measure processing time
-    CTimer ctimer1;
-    CTimer ctimer2;
-    
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // alloc and init data structures
-    VertexHashTable ht_(25000000);
-    Vertices v_(10000000);
-    Triangles t_(20000000);
-    MarchingCubesLookupTables l_tables(e_pattern, t_pattern);
-
-    uint b_size = MC_BLOCKSIZE;
-    uint g_size = (static_cast<uint>(ht_.t_size) + b_size - 1) / b_size;
-    init_vertex_hashtable << < g_size, b_size >> > (ht_);
-    cudaDeviceSynchronize();
-    cudaCheckError();
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // processing time
-    std::cout << " ... compute iso-surface\n";
-    ctimer1.start();
-
-    // compute MC
-    g_size = (t_size + b_size - 1) / b_size;
-    standard_mc << < g_size, b_size >> > (i0, t_size, ugrid, l_tables, ht_, v_, t_);
-    cudaDeviceSynchronize();
-    cudaCheckError();
-
-    // collect tirangles
-    int nr_v = v_.size(); // size<Vertices>(v_);
-    int nr_t = t_.size(); // size<Triangles>(t_);
-    t_.nr_t = nr_t;
-    g_size = (static_cast<uint>(nr_t) + b_size - 1) / b_size;
-    map_triangles << < g_size, b_size >> > (ht_, t_);
-    cudaDeviceSynchronize();
-    cudaCheckError();
-
-    ctimer1.stop();
-    ctimer1.print(std::string("Standard Marching Cubes"));
-    std::cout << " ... total nr. of vertices " << nr_v << std::endl;
-    std::cout << " ... total nr. of triangles " << nr_t << std::endl;
-
-    // compute elment quality
-    float* qm_data{ nullptr };
-    
-    QualityMeasure m_(nr_t);
-    //allocQualityMeasure(m_, nr_t);
-    g_size = (static_cast<uint>(nr_t) + b_size - 1) / b_size;
-    mean_ratio_measure << < g_size, b_size >> > (t_, v_, m_);
-    // save quality measure data
-    qm_data = new float[nr_t];
-    cudaMemcpy(qm_data, m_.q_measure, nr_t * sizeof(float), cudaMemcpyDeviceToHost);
-    // write to file
-    std::ofstream o_file("./data/models/qualityMC.bin", std::ofstream::binary);
-    o_file.write((char*)& nr_t, sizeof(int));
-    o_file.write((char*)qm_data, nr_t * sizeof(float));
-    o_file.close();
-    delete[] qm_data;
-    
-    // copy data into mesh
-    // Copy data from device
-    float3* v_array = new float3[nr_v];
-    float3* n_array = new float3[nr_v];
-    int3* t_array = new int3[nr_t];
-
-    cudaMemcpy(v_array, v_.vertices, nr_v * sizeof(float3), cudaMemcpyDeviceToHost);
-    cudaMemcpy(n_array, v_.normals, nr_v * sizeof(float3), cudaMemcpyDeviceToHost);
-    cudaMemcpy(t_array, t_.triangles, nr_t * sizeof(int3), cudaMemcpyDeviceToHost);
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Generate mesh structure
-    mesh.resizeVertices(nr_v);
-    for (int id = 0; id < nr_v; id++) {
-        // copy vertices
-        Mesh::Vertex v{ v_array[id].x,v_array[id].y, v_array[id].z };
-        Mesh::Normal n{ -n_array[id].x, -n_array[id].y, -n_array[id].z };
-        mesh.addVertex(id, v, n);
-    }
-    // generate two triangles for each quad, directX can render only triangles
-    mesh.resizeTriangles(nr_t);
-    for (int id = 0; id < nr_t; id++) {
-        const int v0 = t_array[id].x;
-        const int v1 = t_array[id].y;
-        const int v2 = t_array[id].z;
-        Mesh::Triangle t1{ v0, v1, v2 };
-        mesh.addTriangle(id, t1);
-    }
 }
 
 void p_mc::DualMarchingCubes::checkFaceColoring(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, std::vector<uchar>& fc_array)
@@ -1099,7 +1199,7 @@ void p_mc::DualMarchingCubes::checkFaceColoring(std::vector<int4>& he_e_array, s
         if (c == 3) a3++;
         if (c == 4) a4++;
         if (c > 4) cA++;
-        if (c == 4) 
+        if (c == 4)
         {
             int k{ 0 };
             if (c0 == 0 || c1 == 0 || c2 == 0 || c3 == 0) k++;
@@ -1110,6 +1210,8 @@ void p_mc::DualMarchingCubes::checkFaceColoring(std::vector<int4>& he_e_array, s
         }
         if (flag)
         {
+            //std::string msg = "ERROR for quadrilateral " + std::to_string(f) + "\n";
+            //d_out::print(msg);
             cnt++;
         }
     }
@@ -1123,7 +1225,7 @@ void p_mc::DualMarchingCubes::checkFaceColoring(std::vector<int4>& he_e_array, s
     std::cout << " ... Color complete: " << cSimpl << " faces have all four colors as neighbors" << std::endl;
 }
 
-void p_mc::DualMarchingCubes::checkHalfedge(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, Mesh& mesh)
+void p_mc::DualMarchingCubes::checkHalfedge(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, std::vector<Quadrilateral>& quads)
 {
     /** halfedge int4:
     //    he.x = origin vertex
@@ -1137,16 +1239,6 @@ void p_mc::DualMarchingCubes::checkHalfedge(std::vector<int4>& he_e_array, std::
     for (int e = 0; e < nr_e; e++)
     {
         int4 he0 = he_e_array[e];
-        if (he0.w == -1)
-        {
-            // found boundary
-            const int v = he_e_array[e].x;
-            Mesh::Attribute a{ 1,0,0,1 };
-            mesh.attribute(v, a);
-            c++;
-            m_.insert(std::make_pair(v, e));
-        }
-        
         // construct quadrilateral, compare with quads from mesh.
         const int ihe0 = e;
         const int ihe1 = he0.z;
@@ -1157,7 +1249,7 @@ void p_mc::DualMarchingCubes::checkHalfedge(std::vector<int4>& he_e_array, std::
         int4 he3 = he_e_array[ihe3];
         int4 heTest = he_e_array[ihe3];
         const int f = he0.y;
-        Mesh::Quadrilateral q = mesh.quadrilateral(f);
+        Quadrilateral q = quads[f];
         const int v0 = he0.x;
         const int v1 = he1.x;
         const int v2 = he2.x;
@@ -1323,31 +1415,75 @@ void p_mc::DualMarchingCubes::checkHalfedge(std::vector<int4>& he_e_array, std::
     //f.close();
 }
 
-void p_mc::DualMarchingCubes::writeTimes( ) 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Write infos to files for measurement purposes
+void p_mc::DualMarchingCubes::writeInfos(const std::string& dataset)
 {
-    std::vector<std::string> f(5);
-    f[0] = "./data/measurements/cuda__MC.txt";
-    f[1] = "./data/measurements/cuda__HE.txt";
-    f[2] = "./data/measurements/cuda_Coloring.txt";
-    f[3] = "./data/measurements/cuda__3X3Y.txt";
-    f[4] = "./data/measurements/cuda__3333.txt";
-    std::map<std::string, std::vector<std::string>> m;
-    m.insert({ f[0], timesMC });
-    m.insert({ f[1], timesHE });
-    m.insert({ f[2], timesColoring });
-    m.insert({ f[3], times3X3Y });
-    m.insert({ f[4], times3333 });
-
-    for (auto n : m)
+    std::ofstream o_file;
+    // print time info
+    std::string filename = dataset + "_TimeInfo" + ".txt";
+    o_file.open(filename);
+    for (auto s : timesInfo)
     {
-        std::ofstream o_file(n.first.c_str(), std::ios::out | std::ios::app);
-        for (auto s : n.second) {
-            o_file << s;
-        }
-        o_file.close();
+        o_file << s << " ms" << std::endl;
     }
-
+    o_file.close();
+    // write element info
+    filename = dataset + "_Elements" + ".txt";
+    o_file.open(filename);
+    for (auto s : elementsInfo)
+    {
+        o_file << s  << std::endl;
+    }
+    o_file.close();
+    // valence distribution DMC
+    filename = dataset + "_valenceDMC" + ".txt";
+    o_file.open(filename);
+    for (auto s : valenceDistDMC)
+    {
+        o_file << s << std::endl;
+    }
+    o_file.close();
+    // valence distribution P3X3YColor
+    filename = dataset + "_valenceP3X3YColor" + ".txt";
+    o_file.open(filename);
+    for (auto s : valenceDistP3X3YColor)
+    {
+        o_file << s << std::endl;
+    }
+    o_file.close();
+    filename = dataset + "_valenceP3X3YOld" + ".txt";
+    o_file.open(filename);
+    for (auto s : valenceDistDMC)
+    {
+        o_file << s << std::endl;
+    }
+    o_file.close();
+    filename = dataset + "_valenceP3333" + ".txt";
+    o_file.open(filename);
+    for (auto s : valenceDistP3333)
+    {
+        o_file << s << std::endl;
+    }
+    o_file.close();
+    filename = dataset + "_valenceTris" + ".txt";
+    o_file.open(filename);
+    for (auto s : valenceDistTris)
+    {
+        o_file << s << std::endl;
+    }
+    o_file.close();
+    // element quality quads
+    filename = dataset + "_qualityQuads" + ".bin";
+    o_file.open(filename, std::ios::binary);
+    int sz = static_cast<int>(elementQualityQuads.size());
+    o_file.write(reinterpret_cast<char*>(&sz), sizeof(int));
+    o_file.write(reinterpret_cast<char*>(elementQualityQuads.data()), sz * sizeof(float));
+    o_file.close();
+    filename = dataset + "_qualityTris" + ".bin";
+    o_file.open(filename, std::ios::binary);
+    sz = static_cast<int>(elementQualityTris.size());
+    o_file.write(reinterpret_cast<char*>(&sz), sizeof(int));
+    o_file.write(reinterpret_cast<char*>(elementQualityTris.data()), sz * sizeof(float));
+    o_file.close();
 }
-
-
-

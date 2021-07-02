@@ -24,9 +24,6 @@ namespace p_mc {
         /// normal buffer
         float3* normals{ nullptr };
         std::shared_ptr<float3> normals_{ nullptr };
-        /// erros for point back projection
-        //float3* error{ nullptr };
-        //std::shared_ptr<float3> error_{ nullptr };
         /// atomic counter
         int* t_size{ nullptr };
         std::shared_ptr<int> t_size_{ nullptr };
@@ -37,14 +34,16 @@ namespace p_mc {
         __host__ Vertices(const int sz) : a_size{ sz }, nr_v{ 0 }
         {
             cudaMalloc(&vertices, sz * sizeof(float3));
+            cudaCheckError();
             cudaMalloc(&normals, sz * sizeof(float3));
-            //cudaMalloc(&error, sz * sizeof(float3));
+            cudaCheckError();
             cudaMalloc(&t_size, sizeof(int));
+            cudaCheckError();
             cudaMemset(t_size, 0, sizeof(int));
+            cudaCheckError();
 
             vertices_ = std::shared_ptr<float3>(vertices, cudaFree);
             normals_ = std::shared_ptr<float3>(normals, cudaFree);
-            //error_ = std::shared_ptr<float3>(error, cudaFree);
             t_size_ = std::shared_ptr<int>(t_size, cudaFree);
         }
         /// destructor
@@ -52,11 +51,9 @@ namespace p_mc {
         {
             vertices_.reset();
             normals_.reset();
-            //error_.reset();
             t_size_.reset();
             vertices = nullptr;
             normals = nullptr;
-            //error = nullptr;
             t_size = nullptr;
             a_size = 0;
             nr_v = 0;
@@ -75,26 +72,29 @@ namespace p_mc {
             cudaMemset(t_size, 0, sizeof(int));
             nr_v = 0;
         }
-        /// copy data 
+        /// copy data
         __host__ void copy(Vertices& v)
         {
             nr_v = v.size();
-            if (nr_v > a_size) {
-                cudaMalloc(&vertices, nr_v * sizeof(float3));
+            if (nr_v != a_size) {
+               cudaMalloc(&vertices, nr_v * sizeof(float3));
                 vertices_.reset(vertices, cudaFree); // free device memory
                 cudaMalloc(&normals, nr_v * sizeof(float3));
-                normals_.reset(normals, cudaFree); // free device memory 
-                //cudaMalloc(&error, nr_v * sizeof(float3));
-                //error_.reset(error, cudaFree); // free device memory
+                normals_.reset(normals, cudaFree); // free device memory
                 cudaCheckError();
-                a_size = nr_v;
+                a_size = nr_v; // new buffer size
             }
             cudaMemcpy((void*)vertices, v.vertices, nr_v * sizeof(float3), cudaMemcpyDeviceToDevice);
             cudaMemcpy((void*)normals, v.normals, nr_v * sizeof(float3), cudaMemcpyDeviceToDevice);
-            //cudaMemcpy((void*)error, v.error, nr_v * sizeof(float3), cudaMemcpyDeviceToDevice);
             cudaMemcpy((void*)t_size, v.t_size, sizeof(int), cudaMemcpyDeviceToDevice);
             cudaCheckError();
         }
+        /// subscript operator
+        __device__ float3 operator[](const int pos) { return vertices[pos]; }
+        /// access to vertex coordinates
+        __device__ float x(const int pos) { return vertices[pos].x; }
+        __device__ float y(const int pos) { return vertices[pos].y; }
+        __device__ float z(const int pos) { return vertices[pos].z; }
         /// add a vertex to buffer
         __device__ int addVertex(const float3 v, const float3 n)
         {

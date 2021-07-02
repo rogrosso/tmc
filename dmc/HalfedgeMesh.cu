@@ -61,6 +61,19 @@ __global__ void map_edges(p_mc::EdgeHashTable ht_, p_mc::Edges e_)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// count non-manifold edges
+__global__ void non_manifold(p_mc::EdgeHashTable e, int* t_size)
+{
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= e.size()) return;
+    if (e.empty(tid)) return;
+    if (e.nrFaces(tid) > 2) // up to four faces can share an edge
+    {
+        atomicAdd(t_size, 1);
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // collect halfedges, faces and vertices
 // Loop over quadrilaterals
 __global__ void collect_halfedge_elements(p_mc::Quadrilaterals q_, p_mc::Halfedges he_, p_mc::HalfedgeFaces he_f, p_mc::HalfedgeVertices he_v, p_mc::EdgeHashTable ht_)
@@ -79,7 +92,7 @@ __global__ void collect_halfedge_elements(p_mc::Quadrilaterals q_, p_mc::Halfedg
     //    he.y = face
     //    he.z = next
     //   he.w = tween
-    // 1. 
+    // 1.
     he_.he_e[he_addr].x = v0;
     he_.he_e[he_addr].y = tid;
     he_.he_e[he_addr].z = he_addr + 1;
@@ -137,7 +150,7 @@ __global__ void collect_halfedge_elements_he(p_mc::Quadrilaterals q_, p_mc::Half
     //    he.y = face
     //    he.z = next
     //   he.w = tween
-    // 1. 
+    // 1.
     he_.he_e[he_addr].x = v0;
     he_.he_e[he_addr].y = tid;
     he_.he_e[he_addr].z = he_addr + 1;
@@ -474,7 +487,7 @@ int p_mc::HalfedgeMesh::edges(Quadrilaterals& q, Edges& e)
 //    timer.stop();
 //    //t.stop();
 //    //t.print(std::string("Halfedges: connect twins, mark non-manifold"));
-//    
+//
 //    // return number of computed halfedges
 //    return nr_e;
 //}
@@ -488,7 +501,7 @@ int p_mc::HalfedgeMesh::halfedges(const int nr_v, Quadrilaterals& q, Halfedges& 
     he.resize(nr_e);
     f.resize(nr_q);
     v.resize(nr_v);
-    HalfedgeHashTable ht(2 * 4 * nr_q); // twice as large as the total number of expected elements
+    HalfedgeHashTable ht(static_cast<int>(100./70. * 4 * nr_q)); // use the 70% rule, there are 4 halfedge for each quad, multiply by 100/70
     const int b_size = MC_BLOCKSIZE;
     int g_size = (static_cast<uint>(ht.t_size) + b_size - 1) / b_size;
     init_halfedge_hashtable << < g_size, b_size >> > (ht);
@@ -525,4 +538,37 @@ int p_mc::HalfedgeMesh::halfedges(const int nr_v, Quadrilaterals& q, Halfedges& 
 
     // return number of computed halfedges
     return nr_e;
+}
+
+int p_mc::HalfedgeMesh::nonManifold(Quadrilaterals& q)
+{
+    const int nr_q = q.size();
+    EdgeHashTable ht(4 * nr_q);
+    const int b_size = MC_BLOCKSIZE;
+    int g_size = (static_cast<uint>(ht.t_size) + b_size - 1) / b_size;
+    init_edge_hashtable << < g_size, b_size >> > (ht);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    // compute edges hash table
+    g_size = (static_cast<uint>(nr_q) + b_size - 1) / b_size;
+    collect_edges << < g_size, b_size >> > (q, ht);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    // count non-manifold edges
+    int* t_size{ nullptr };
+    cudaMalloc(&t_size, sizeof(int));
+    cudaMemset(t_size, 0, sizeof(int));
+    cudaCheckError();
+    g_size = (static_cast<uint>(ht.size()) + b_size - 1) / b_size;
+    non_manifold << < g_size, b_size >> > (ht, t_size);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    int nr_n{ 0 };
+    cudaMemcpy(&nr_n, t_size, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+    cudaCheckError();
+    // free memory
+    cudaFree(t_size);
+    cudaCheckError();
+    return nr_n;
 }

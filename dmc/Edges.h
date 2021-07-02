@@ -12,7 +12,7 @@
 
 namespace p_mc {
     /// <summary>
-    /// Edge data structure. An edge consist of the two indices of the 
+    /// Edge data structure. An edge consist of the two indices of the
     /// end vertices.
     /// </summary>
     struct Edges {

@@ -25,11 +25,9 @@
 
 #include "helper_cuda.h"
 
-
-
 namespace p_mc {
     /// <summary>
-    /// A uniform grid. 
+    /// A uniform grid.
     /// </summary>
     struct UniformGrid {
         /// defines
@@ -142,7 +140,24 @@ namespace p_mc {
             return *this;
         }
         /// <summary>
-        /// Set scalar data. Copy scalar data to device, other data 
+        /// reset volume data
+        /// </summary>
+        void clear()
+        {
+            idim = 0;
+            jdim = 0;
+            kdim = 0;
+            x0 = 0;
+            y0 = 0;
+            z0 = 0;
+            dx = 0;
+            dy = 0;
+            dz = 0;
+            d_scalar = nullptr;
+            d_scalar_.reset();
+        }
+        /// <summary>
+        /// Set scalar data. Copy scalar data to device, other data
         /// of uniform grid was already set.
         /// </summary>
         /// <param name="data"></param>
@@ -226,20 +241,39 @@ namespace p_mc {
         /// <param name="y_size">size in y-dimension</param>
         /// <param name="z_size">size in z-dimension</param>
         /// <returns></returns>
-        __host__ void size(const int x_size, const int y_size, const int z_size) {
+        __host__ void size(const int x_size, const int y_size, const int z_size)
+        {
             idim = x_size;
             jdim = y_size;
             kdim = z_size;
         }
         /// <summary>
-        /// Set coordinates oriding of uniform grid, required to compute 
+        /// compute unique edge global index.
+        /// </summary>
+        /// <param name="e">local edge index</param>
+        /// <param name="i_idx">i-index of cell</param>
+        /// <param name="j_idx">j-index of cell</param>
+        /// <param name="k_idx">k-index of cell</param>
+        /// <returns></returns>
+        __host__ __device__ int e_glIndex(const int e, const int i_idx, const int j_idx, const int k_idx)
+        {
+            const unsigned long long gei_pattern_ = 670526590282893600ull;
+            const int i = i_idx + (int)((gei_pattern_ >> 5 * e) & 1); // global_edge_id[eg][0];
+            const int j = j_idx + (int)((gei_pattern_ >> (5 * e + 1)) & 1); // global_edge_id[eg][1];
+            const int k = k_idx + (int)((gei_pattern_ >> (5 * e + 2)) & 1); // global_edge_id[eg][2];
+            const int offs = (int)((gei_pattern_ >> (5 * e + 3)) & 3);
+            return (3 * gl_index(i, j, k) + offs);
+        }
+        /// <summary>
+        /// Set coordinates oriding of uniform grid, required to compute
         /// vertex coordinates in physical space
         /// </summary>
         /// <param name="x">min x-coordinate</param>
         /// <param name="y">min y-coordinate</param>
         /// <param name="z">min z-coordinate</param>
         /// <returns></returns>
-        __host__ void origin(const float x, const float y, const float z) {
+        __host__ void origin(const float x, const float y, const float z)
+        {
             x0 = x;
             y0 = y;
             z0 = z;
@@ -251,7 +285,8 @@ namespace p_mc {
         /// <param name="y">spacing in y-dimension</param>
         /// <param name="z">spacing in z-dimension</param>
         /// <returns></returns>
-        __host__ void spacing(const float x, const float y, const float z) {
+        __host__ void spacing(const float x, const float y, const float z)
+        {
             dx = x;
             dy = y;
             dz = z;
@@ -373,7 +408,7 @@ namespace p_mc {
         /// Generate uniform grid for predefined scalar functions
         /// </summary>
         enum class SurfaceCase: int {
-            Sphere = 0, Torus = 1, TwoHoledTorus = 2, FourHoledTorus = 3, 
+            Sphere = 0, Torus = 1, TwoHoledTorus = 2, FourHoledTorus = 3,
             GenusTwo = 4,
             iWP = 5,
             pwHybrid = 6,
@@ -421,7 +456,7 @@ namespace p_mc {
                 h_volume[pos] = static_cast<float>(v);
                 pos++;
             }
-            // 
+            //
             setScalar(h_volume);
             delete[] h_volume;
         }

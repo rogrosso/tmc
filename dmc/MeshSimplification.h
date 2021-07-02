@@ -24,12 +24,12 @@
 namespace p_mc {
     /// <summary>
     /// Simplify mesh by removing elements with vertex valence pattern
-    /// 3X3Y, X,Y >= 5, and 3333. 
+    /// 3X3Y, X,Y >= 5, and 3333.
     /// </summary>
     struct MeshSimplification {
         /// <summary>
         /// Simplify elements with vertex valence pattern 3X3Y. Use face coloring
-        /// to simplify mesh. 
+        /// to simplify mesh.
         /// </summary>
         /// <param name="v">vertices</param>
         /// <param name="q">quadrilaterals</param>

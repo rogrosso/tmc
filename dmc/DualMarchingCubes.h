@@ -19,107 +19,223 @@
 #include <cmath>
 #include <memory>
 
-// cuda stuff
+// CUDA stuff
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
 
 // parallel Dual Marching Cubes
-#include "Mesh.h"
 #include "UniformGrid.h"
-#include "GaussElimination.h"
 
 namespace p_mc {
     /// <summary>
-    /// 
+    /// Implements the Dual Marching Cubes in CUDA
     /// </summary>
     class DualMarchingCubes {
     public:
         using uint   = unsigned int;
         using ushort = unsigned short;
         using uchar  = unsigned char;
+        using Vertex = std::array<float, 3>;
         using Point = std::array<float, 3>;
+        using Normal = std::array<float, 3>;
+        using Halfedge = std::array<int, 4>;
+        using HalfedgeFace = int;
+        using HalfedgeVertex = int;
+        using Triangle = std::array<int, 3>;
+        using Quadrilateral = std::array<int, 4>;
         using UGrid = UniformGrid;
         using SurfaceCase = UniformGrid::SurfaceCase;
 
+        /// Remark:
+        /// Halfedges in CUDA are represented as follows:
+        /// A halfedge is an int4:
+        ///    he.x = origin vertex
+        ///    he.y = face
+        ///    he.z = next
+        ///    he.w = twin
+        /// In c++ use the convention
+        /// halfedge[0] = index of origin vertex
+        /// halfedge[1] = index of face
+        /// halfedge[2] = index of next halfedge
+        /// halfedge[3] = index of twin halfedge
+
         /// Destructor
-        ~DualMarchingCubes() {} 
+        ~DualMarchingCubes() {}
         /// <summary>
         /// Computes the DMC from volume data
         /// </summary>
         /// <param name="i0">iso-value</param>
         /// <param name="mesh">Mesh representing the iso-surface</param>
+        /// <param name="o_he">Halfedges of output halfedge data structure</param>
+        /// <param name="o_hef">Halfedge faces of output halfedge data structure</param>
+        /// <param name="o_hev">Halfedge vertices of output halfedge data structure</param>
         /// <param name="config">configuration object mainly for tests purposes</param>
-        void dualMC(const float i0, Mesh& mesh, std::map<std::string,int>& config);
+        void dualMC(const float i0,
+            std::vector<Vertex>& v, std::vector<Normal>& n, std::vector<Triangle>& t, std::vector<Quadrilateral>& q,
+            std::vector<Halfedge>& o_he, std::vector<HalfedgeFace>& o_hef, std::vector<HalfedgeVertex>& o_hev,
+            std::map<std::string,int>& config);
         /// <summary>
-        /// Implements the standard Marching Cubes algorithm
-        /// </summary>
-        /// <param name="i0">iso-value</param>
-        /// <param name="mesh">Mesh representing the iso-surface</param>
-        void standardMC(const float i0, Mesh& mesh);
-        /// <summary>
-        /// Read volume data from file and init UniformGrid object
+        /// Read volume data from file and initialize UniformGrid object
         /// </summary>
         /// <typeparam name="T">Type of volume data, expected are unsigned short or float</typeparam>
         /// <param name="filename">name of file containing volume data</param>
         template<typename T>
         void init(const std::string& filename) { ugrid.readDataFromFile<T>(filename); }
         /// <summary>
-        /// Init volume data from a predefined scalar function
+        /// Initialize volume data from a predefined scalar function
         /// </summary>
         /// <param name="dim">Size of volume data</param>
         /// <param name="sc">Specify which predefined scalar function has to be used</param>
         void init(const std::array<int, 3>& dim, SurfaceCase sc) { ugrid.generateVolume(dim, sc); }
         /// <summary>
+        /// clear all host arrays
+        /// </summary>
+        void clear()
+        {
+            valenceDistDMC.clear();
+            valenceDistP3X3YColor.clear();
+            valenceDistP3X3YOld.clear();
+            valenceDistP3333.clear();
+            valenceDistTris.clear();
+            elementQualityTris.clear();
+            elementQualityQuads.clear();
+            nrFailedProjections1 = 0;
+            nrFailedProjections2 = 0;
+
+            // measure times for DMC
+            timesInfo.clear();
+            // measure number of elements
+            elementsInfo.clear();
+            // clear volume
+            ugrid.clear();
+        }
+        /// <summary>
         /// Print computation time for performance measurements
         /// </summary>
-        void writeTimes( ); 
+        void writeInfos(const std::string& dataset);
     private:
         UGrid ugrid;
         void checkFaceColoring(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, std::vector<uchar>& fc_array);
-        void checkHalfedge(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, Mesh& mesh);
-
-        // measure times for  mc
-        std::vector<std::string> timesMC;
-        std::vector<std::string> timesHE;
-        std::vector<std::string> timesColoring;
-        std::vector<std::string> times3X3Y;
-        std::vector<std::string> times3333;
-
-        // Timer, c++11 or later
-        struct Timer {
-            typedef std::chrono::high_resolution_clock clock_t;
-            /// time point set at start time
-            clock_t::time_point m_start;
-            /// time point set and stop time
-            clock_t::time_point m_end;
-
-            /// set start time point to now
-            void start() {
-                m_start = clock_t::now();
-            }
-            /// set end time point to now
-            void stop() {
-                m_end = clock_t::now();
-            }
-
-            /// compute and print ellapsed time in milliseconds in an readable way
-            void print() {
-                std::chrono::milliseconds time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(m_end - m_start);
-                std::ostringstream buf;
-                buf << "time: " << time_ms.count() << " ms" << std::endl;
-                std::cout << buf.str() << std::endl;
-            }
+        void checkHalfedge(std::vector<int4>& he_e_array, std::vector<int>& he_f_array, std::vector<Quadrilateral>& quads);
+        std::vector<uint> valenceDistDMC;
+        std::vector<uint> valenceDistP3X3YColor;
+        std::vector<uint> valenceDistP3X3YOld;
+        std::vector<uint> valenceDistP3333;
+        std::vector<uint> valenceDistTris;
+        std::vector<float> elementQualityTris;
+        std::vector<float> elementQualityQuads;
+        int nrFailedProjections1{ 0 };
+        int nrFailedProjections2{ 0 };
+        // measure times for DMC
+        std::vector<std::string> timesInfo;
+        // measure number of elements
+        std::vector<std::string> elementsInfo;
+        // add info on running times
+        enum class TimeInfo {
+            TimeDMC,
+            TimeMC,
+            TimeHE,
+            TimeFaceColoring,
+            TimeP3333,
+            TimeP3X3YColor,
+            TimeP3X3YOld
         };
-        /// Timer to stop processing time
-        Timer timer;
+        void addTimeInfo(TimeInfo t, float t_milliseconds)
+        {
+            std::string msg;
+            switch (t)
+            {
+            case p_mc::DualMarchingCubes::TimeInfo::TimeDMC:
+                msg = std::string({ " ... DMC: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeMC:
+                msg = std::string({ " ... MC: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeHE:
+                msg = std::string({ " ... halfedge: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeFaceColoring:
+                msg = std::string({ " ... face coloring: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeP3333:
+                msg = std::string({ " ... P3333: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeP3X3YColor:
+                msg = std::string({ " ... P3X3YColor: " });
+                break;
+            case p_mc::DualMarchingCubes::TimeInfo::TimeP3X3YOld:
+                msg = std::string({ " ... P3X3YOld: " });
+                break;
+            default:
+                msg = std::string({ " ... DMC: " });
+                break;
+            }
+            timesInfo.push_back(msg + std::to_string(t_milliseconds));
+        }
+        // add element info
+        enum class ElementsInfo {
+            ElementsDMC,
+            ElementsNonManifoldEdges,
+            ElementsFailedProjections1,
+            ElementsFailedProjections2,
+            ElementsP3333,
+            ElementsP3X3YColor,
+            ElementsP3X3YOld
+        };
+        void addElementsInfo(ElementsInfo e, int nr_v, int nr_q)
+        {
+            std::string msg;
+            switch (e)
+            {
+            case p_mc::DualMarchingCubes::ElementsInfo::ElementsDMC:
+                msg = std::string({ " ... DMC: " });
+                break;
+            case p_mc::DualMarchingCubes::ElementsInfo::ElementsP3333:
+                msg = std::string({ " ... P3333: " });
+                break;
+            case p_mc::DualMarchingCubes::ElementsInfo::ElementsP3X3YColor:
+                msg = std::string({ " ... P3X3YColor: " });
+                break;
+            case p_mc::DualMarchingCubes::ElementsInfo::ElementsP3X3YOld:
+                msg = std::string({ " ... P3X3YOld: " });
+                break;
+            default:
+                break;
+            }
+            elementsInfo.push_back(msg + "\n" + " ... nr. vertices: " + std::to_string(nr_v) + "\n" + " ... nr. elements: " + std::to_string(nr_q));
+        }
+        void addElementsInfo(ElementsInfo e, int nr_nm)
+        {
+            if (e == ElementsInfo::ElementsNonManifoldEdges)
+            {
+                elementsInfo.push_back({ " ... nr. of non-manifold edges: " + std::to_string(nr_nm) });
+            }
+            else if (e == ElementsInfo::ElementsFailedProjections1)
+            {
+                elementsInfo.push_back({ " ... nr. of failed projections level 1: " + std::to_string(nr_nm) });
+            }
+            else if (e == ElementsInfo::ElementsFailedProjections2)
+            {
+                elementsInfo.push_back({ " ... nr. of failed projections level 2: " + std::to_string(nr_nm) });
+            }
+        }
+        void addElementsInfo(const float i0)
+        {
+            elementsInfo.push_back({
+                " ... nx: " + std::to_string(ugrid.i_size())
+                + ", ny: " + std::to_string(ugrid.j_size())
+                + ", nz: " + std::to_string(ugrid.k_size())
+                + ", i0: " + std::to_string(i0)
+                });
+        }
 
         // lookup tables
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         /// marching cubes tables
         /// Tables are adapted to the index convention used in this algorithm
         ///
-        /// This table encodes the edges which are intersected by the isosurface
+        /// This table encodes the edges which are intersected by the iso-surface
         const std::array<unsigned short, 256> e_pattern = std::array<unsigned short, 256>{ {// MSDN workaround
                 0, 265, 515, 778, 2060, 2309, 2575, 2822,
                     1030, 1295, 1541, 1804, 3082, 3331, 3593, 3840,
@@ -419,7 +535,7 @@ namespace p_mc {
         // list of ambiguous cases
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         /// mark MC cases which are ambiguous and has to be solved with the asymptotic decider
-        const std::array<uchar, 256> t_ambig = std::array<uchar,256>{ 
+        const std::array<uchar, 256> t_ambig = std::array<uchar,256>{
             0, // quitte: 0 <-> mc: 0, class representative: 0
             1, // quitte: 1 <-> mc: 1, class representative: 1
             2, // quitte: 2 <-> mc: 2, class representative: 1
@@ -680,7 +796,7 @@ namespace p_mc {
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         /// This table encodes the MC polygons obtained by intersecting the iso-surface with a cell
         /// The talbe is obtained by modifying the lookup table of the MC algorithm
-        const std::array<char, 4352> r_pattern = std::array<char, 4352>{ 
+        const std::array<char, 4352> r_pattern = std::array<char, 4352>{
                 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 1, 3, 0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                 1, 3, 0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,

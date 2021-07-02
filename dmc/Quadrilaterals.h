@@ -125,7 +125,7 @@ namespace p_mc {
         }
         /// add a quadrilateral to index buffer, position in array is computed via atomicAdd
         __device__ int addColoredQuadrilateral(const int4 q, const int c)
-        {   
+        {
             if (q.x >= 0 && q.y >= 0 && q.z >= 0 && q.w >= 0)
             {
                 int pos = atomicAdd(t_size, 1);
@@ -168,7 +168,7 @@ namespace p_mc {
             quadrilaterals[pos].z = v2;
             quadrilaterals[pos].w = v3;
             setColor(pos,c);
-        }        
+        }
         /// copy data
         __host__ void copy(Quadrilaterals& q)
         {

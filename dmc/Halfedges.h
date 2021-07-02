@@ -13,7 +13,7 @@
 
 namespace p_mc {
     /// <summary>
-    /// Halfedge data structure. Halfedges are represented as 
+    /// Halfedge data structure. Halfedges are represented as
     /// follows: halfedge index is a int4:
     ///    he.x = origin vertex
     ///    he.y = face

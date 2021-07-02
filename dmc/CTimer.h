@@ -77,6 +77,14 @@ namespace p_mc {
 			buf << std::setprecision(7) << " ... " << m << " time in ms: " << e_milliseconds << std::endl;
 			return buf.str();
 		}
+		/// <summary>
+		/// Get elapsed time in milliseconds
+		/// </summary>
+		/// <returns>elapsed time in millisecond</returns>
+		float getTime()
+		{
+			return e_milliseconds;
+		}
 
 	};
 } // namespace p_mc

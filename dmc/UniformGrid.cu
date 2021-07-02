@@ -188,7 +188,7 @@ __host__ void p_mc::UniformGrid::generateVolume(const std::array<int, 3>& dim, S
     float xmax = 1.0f;
     float ymax = 1.0f;
     float zmax = 1.0f;
-    
+
     // define grid size
     dx = (xmax - xmin) / (idim - 1.0f);
     dy = (ymax - ymin) / (jdim - 1.0f);

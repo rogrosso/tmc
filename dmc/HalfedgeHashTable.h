@@ -13,7 +13,7 @@
 
 namespace p_mc {
     /// <summary>
-    /// A hash table to store halfedges, required to 
+    /// A hash table to store halfedges, required to
     /// construct the halfedge data structure out of
     /// a shared vertex representation of a mesh.
     /// </summary>
@@ -30,7 +30,7 @@ namespace p_mc {
         /// indices of faces sharing the same edge
         //int* face{ nullptr };
         //std::shared_ptr<int> face_{ nullptr };
-        /// number of faces sharing 
+        /// number of faces sharing
         int* nr_face{ nullptr };
         std::shared_ptr<int> nr_face_{ nullptr };
         /// constructors
@@ -160,7 +160,7 @@ namespace p_mc {
         }
         /// <summary>
         /// Access twins sharing this edge, there might be
-        /// up to four halfedges (non-manifold case). 
+        /// up to four halfedges (non-manifold case).
         /// Boundary edges and empty buckes have a non-valid
         /// index (-1 in this case)
         /// </summary>

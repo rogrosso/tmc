@@ -2,14 +2,10 @@
 
 // C++ libs
 #include <iostream>
-#include <sstream>
 
 // cuda stuff
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-
-// Project files
-
 
 namespace p_mc {
     /// Note: inline constexpr is C++17. The NVIDIA compiler can't handle this.
@@ -61,8 +57,8 @@ namespace p_mc {
     constexpr int P_3333 = 1;
     /// <summary>
     /// Neighbor of an element with valence pattern 3333
-    /// The element will be removed to simplify the mesh. 
-    /// In case of neighbors all with valence pattern 3333, elements cannot 
+    /// The element will be removed to simplify the mesh.
+    /// In case of neighbors all with valence pattern 3333, elements cannot
     /// be removed, e.g. a hexahedron
     /// </summary>
     constexpr int P_N_3333 = 2;
@@ -76,19 +72,30 @@ namespace p_mc {
     /// </summary>
     constexpr int Q_NONMANIFOLD = 0xF;
 
-    inline void cudaError(const char* fileName, const size_t lineNumber)
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // error handling
+    //#define cudaCheckError() { \
+    //	cudaError_t e=cudaGetLastError(); \
+    //	if(e!=cudaSuccess) { \
+    //		using d_out = utilities::DebugString; \
+    //		std::ostringstream buf; \
+    //		buf << "Cuda failure in file " << __FILE__ << ", line: " << __LINE__ << ", error: " << cudaGetErrorString(e) << "\n";  \
+    //        d_out::print(buf.str()); \
+    //		exit(0); \
+    //	} \
+    //}
+
+    inline void cudaError_(const char* fileName, const size_t lineNumber)
     {
         cudaError_t e = cudaGetLastError();
         if (e != cudaSuccess)
         {
-            std::ostringstream buf;
-            buf << "Cuda failure in file " << fileName << ", line: " << lineNumber << ", error: " << cudaGetErrorString(e) << std::endl;
-            std::cout << buf.str() << std::endl;
+            std::cout << "Cuda failure in file " << fileName << ", line: " << lineNumber << ", error: " << cudaGetErrorString(e) << std::endl;
             exit(0);
         }
     }
 
-#define cudaCheckError() cudaError(__FILE__, __LINE__)
+#define cudaCheckError() cudaError_(__FILE__, __LINE__)
 
 
 } // namespace

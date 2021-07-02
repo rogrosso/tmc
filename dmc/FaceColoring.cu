@@ -14,7 +14,7 @@ __global__ void color_faces(const int nr_q, const int c, p_mc::FaceColoring::Col
 {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nr_q) return;
-    const int q_id = fc.getFace(c, tid); 
+    const int q_id = fc.getFace(c, tid);
     // collect halfedge from face
     const int e0 = he_f.he_e[q_id];
     const int e1 = he_.getNext(e0); // he_.he_e[e0].z;
@@ -129,14 +129,17 @@ __host__ void p_mc::FaceColoring::colorFaces(Quadrilaterals& q, Halfedges he, Ha
     for (int c = 5; c < 24; c++)
     {
         const int nr_f = fc.size(c);
-        g_size = (nr_f + b_size - 1) / b_size;
-        color_faces << < g_size, b_size >> > (nr_f, c, fc, q, he, hef);
-        cudaDeviceSynchronize();
-        cudaCheckError();
+        if (nr_f > 0)
+        {
+            g_size = (nr_f + b_size - 1) / b_size;
+            color_faces << < g_size, b_size >> > (nr_f, c, fc, q, he, hef);
+            cudaDeviceSynchronize();
+            cudaCheckError();
+        }
     }
     g_size = (nr_q + b_size - 1) / b_size;
     optimize_face_coloring << < g_size, b_size >> > (q, he, hef);
     cudaDeviceSynchronize();
     cudaCheckError();
     timer.stop();
-} 
+}

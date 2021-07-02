@@ -38,7 +38,7 @@ namespace p_mc {
             triangles_.reset(triangles, cudaFree);
             t_size_.reset(t_size, cudaFree);
         }
-        /// desctrucotr
+        /// destructor
         __host__ ~Triangles()
         {
             a_size = 0;
@@ -56,6 +56,7 @@ namespace p_mc {
             cudaMemcpy(&nr_t, t_size, sizeof(int), cudaMemcpyDeviceToHost);
             return nr_t;
         }
+
         /// set default value to atomic counter
         __host__ void initAtomicCounter()
         {
@@ -102,6 +103,19 @@ namespace p_mc {
             cudaMemcpy((void*)triangles, t.triangles, nr_t * sizeof(float3), cudaMemcpyDeviceToDevice);
             cudaMemcpy((void*)t_size, t.t_size, sizeof(int), cudaMemcpyDeviceToDevice);
             cudaCheckError();
+        }
+        /// access vertex index
+        __device__ int v0(const int pos)
+        {
+            return triangles[pos].x;
+        }
+        __device__ int v1(const int pos)
+        {
+            return triangles[pos].y;
+        }
+        __device__ int v2(const int pos)
+        {
+            return triangles[pos].z;
         }
     };
 } // namespace p_mc
